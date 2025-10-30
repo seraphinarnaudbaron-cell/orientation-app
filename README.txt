@@ -1,6 +1,5 @@
 Orientation App - packaged project
 Location center: Pont de l'Amour, Villard-de-Lans (lat: 45.06194, lon: 5.56745)
-Admin password set to: Lacacahuette38
 Theme: green / white / black
 
 Files:
