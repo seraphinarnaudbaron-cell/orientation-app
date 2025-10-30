@@ -1,0 +1,7 @@
+# Fichiers et dossiers à ignorer
+.buildozer/
+bin/
+__pycache__/
+*.apk
+*.pyc
+*.log
