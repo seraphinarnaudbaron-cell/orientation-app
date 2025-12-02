@@ -1,0 +1,45 @@
+
+<Root>:
+    MapScr:
+    AdminScr:
+    SplashScr:
+
+<SplashScr@MDScreen>:
+    name: "splash"
+    MDLabel:
+        text: "Orientation App"
+        halign: "center"
+    on_enter: Clock.schedule_once(lambda x: setattr(app.root,'current','map'), 2)
+
+<MapScr@MDScreen>:
+    name: "map"
+    MDBoxLayout:
+        orientation: "vertical"
+        MDToolbar:
+            title: "Orientation"
+            left_action_items: [["menu", lambda x: setattr(app.root,'current','admin')]]
+        MapView:
+            id: map_id
+            zoom: 16
+            lat: 45.0617
+            lon: 5.56722
+
+<AdminScr@MDScreen>:
+    name: "admin"
+    MDBoxLayout:
+        orientation: "vertical"
+        MDToolbar:
+            title: "Admin Panel"
+            left_action_items: [["arrow-left", lambda x: setattr(app.root,'current','map')]]
+        MDTextField:
+            id: lat
+            hint_text: "Latitude"
+        MDTextField:
+            id: lon
+            hint_text: "Longitude"
+        MDTextField:
+            id: name
+            hint_text: "Name"
+        MDRaisedButton:
+            text: "Add balise"
+            on_release: app.add_balise(float(lat.text), float(lon.text), name.text)

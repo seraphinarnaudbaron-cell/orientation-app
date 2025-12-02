@@ -1,0 +1,17 @@
+
+name: Build Android
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install deps
+        run: |
+          sudo apt update
+          sudo apt install -y python3-pip zip git
+          pip install buildozer cython
+      - name: Build APK
+        run: |
+          buildozer android debug
