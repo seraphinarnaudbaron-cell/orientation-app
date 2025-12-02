@@ -15,6 +15,10 @@ jobs:
           mkdir -p $HOME/.android
           yes | $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager --licenses --sdk_root=$HOME/.buildozer/android/platform/android-sdk
 
+      - name: Install Android Build Tools
+        run: |
+          $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager "build-tools;36.1.0" "platforms;android-33" --sdk_root=$HOME/.buildozer/android/platform/android-sdk
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
