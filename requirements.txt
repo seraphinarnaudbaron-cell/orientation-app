@@ -1,0 +1,7 @@
+kivy==2.3.0
+requests
+plyer
+certifi
+Cython==0.29.33
+buildozer
+python-for-android
