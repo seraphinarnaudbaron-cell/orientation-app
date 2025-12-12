@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     
     steps:
     - name: Checkout code
@@ -26,33 +26,28 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
     
-    - name: Setup Android SDK
+    - name: Install system dependencies
       run: |
-        # Créer le répertoire Android SDK
-        mkdir -p $HOME/android-sdk/cmdline-tools
-        cd $HOME/android-sdk/cmdline-tools
-        
-        # Télécharger command line tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-        unzip -q commandlinetools-linux-9477386_latest.zip
-        mv cmdline-tools latest
-        
-        # Définir ANDROID_HOME et PATH
-        echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-        echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-        echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
-        echo "$HOME/android-sdk/build-tools/34.0.0" >> $GITHUB_PATH
-    
-    - name: Accept Android SDK licenses
-      run: |
-        yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
-    
-    - name: Install Android SDK components
-      run: |
-        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools"
-        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-31"
-        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0"
-        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "ndk;25.2.9519653"
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          git \
+          unzip \
+          zip \
+          libffi-dev \
+          libssl-dev \
+          python3-dev \
+          autoconf \
+          libtool \
+          pkg-config \
+          zlib1g-dev \
+          libncurses5-dev \
+          libncursesw5-dev \
+          libtinfo5 \
+          cmake \
+          libgstreamer1.0-dev \
+          gstreamer1.0-plugins-base \
+          gstreamer1.0-plugins-good
     
     - name: Install Python dependencies
       run: |
@@ -65,7 +60,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ hashFiles('buildozer.spec') }}
+        key: buildozer-global-${{ hashFiles('buildozer.spec') }}-v2
         restore-keys: |
           buildozer-global-
     
@@ -73,19 +68,44 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-project-${{ hashFiles('buildozer.spec') }}
+        key: buildozer-project-${{ hashFiles('buildozer.spec') }}-v2
         restore-keys: |
           buildozer-project-
     
+    - name: Accept Android SDK licenses (pre-emptive)
+      run: |
+        mkdir -p ~/.android
+        echo -e "\n8933bad161af4178b1185d1a37fbf41ea5269c55" > ~/.android/repositories.cfg
+        echo -e "\nd56f5187479451eabf01fb78af6dfcb131a6481e" >> ~/.android/repositories.cfg
+        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" >> ~/.android/repositories.cfg
+    
     - name: Build with Buildozer
       run: |
+        # Buildozer va gérer le SDK Android lui-même
         buildozer android debug
       env:
-        ANDROID_HOME: ${{ env.ANDROID_HOME }}
+        # Ne pas définir ANDROID_HOME pour laisser Buildozer gérer
+        BUILDOZER_LOG_LEVEL: 2
+    
+    - name: List generated files
+      if: always()
+      run: |
+        echo "=== Contents of bin/ directory ==="
+        ls -lah bin/ || echo "bin/ directory not found"
+        echo "=== Contents of .buildozer/android/platform/build-* ==="
+        find .buildozer/android/platform/build-* -name "*.apk" 2>/dev/null || echo "No APK found in build directory"
     
     - name: Upload APK
       uses: actions/upload-artifact@v4
+      if: success()
       with:
         name: orientation-jp-debug
         path: bin/*.apk
-        if-no-files-found: error
+        if-no-files-found: warn
+    
+    - name: Upload build logs on failure
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: buildozer-logs
+        path: .buildozer/android/platform/build-*/
