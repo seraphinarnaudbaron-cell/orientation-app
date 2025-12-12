@@ -44,10 +44,7 @@ jobs:
           libncurses5-dev \
           libncursesw5-dev \
           libtinfo5 \
-          cmake \
-          libgstreamer1.0-dev \
-          gstreamer1.0-plugins-base \
-          gstreamer1.0-plugins-good
+          cmake
     
     - name: Install Python dependencies
       run: |
@@ -60,7 +57,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ hashFiles('buildozer.spec') }}-v2
+        key: buildozer-global-${{ hashFiles('buildozer.spec') }}-v3
         restore-keys: |
           buildozer-global-
     
@@ -68,23 +65,14 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-project-${{ hashFiles('buildozer.spec') }}-v2
+        key: buildozer-project-${{ hashFiles('buildozer.spec') }}-v3
         restore-keys: |
           buildozer-project-
     
-    - name: Accept Android SDK licenses (pre-emptive)
-      run: |
-        mkdir -p ~/.android
-        echo -e "\n8933bad161af4178b1185d1a37fbf41ea5269c55" > ~/.android/repositories.cfg
-        echo -e "\nd56f5187479451eabf01fb78af6dfcb131a6481e" >> ~/.android/repositories.cfg
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" >> ~/.android/repositories.cfg
-    
     - name: Build with Buildozer
       run: |
-        # Buildozer va gérer le SDK Android lui-même
         buildozer android debug
       env:
-        # Ne pas définir ANDROID_HOME pour laisser Buildozer gérer
         BUILDOZER_LOG_LEVEL: 2
     
     - name: List generated files
@@ -92,8 +80,6 @@ jobs:
       run: |
         echo "=== Contents of bin/ directory ==="
         ls -lah bin/ || echo "bin/ directory not found"
-        echo "=== Contents of .buildozer/android/platform/build-* ==="
-        find .buildozer/android/platform/build-* -name "*.apk" 2>/dev/null || echo "No APK found in build directory"
     
     - name: Upload APK
       uses: actions/upload-artifact@v4
@@ -108,4 +94,6 @@ jobs:
       if: failure()
       with:
         name: buildozer-logs
-        path: .buildozer/android/platform/build-*/
+        path: |
+          .buildozer/android/platform/build-*/
+          *.log
