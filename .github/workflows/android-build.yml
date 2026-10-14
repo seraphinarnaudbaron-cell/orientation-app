@@ -61,7 +61,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ hashFiles('buildozer.spec') }}-v4
+        key: buildozer-global-${{ hashFiles('buildozer.spec') }}-v5
         restore-keys: |
           buildozer-global-
     
@@ -69,7 +69,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-project-${{ hashFiles('buildozer.spec') }}-v4
+        key: buildozer-project-${{ hashFiles('buildozer.spec') }}-v5
         restore-keys: |
           buildozer-project-
     

@@ -13,7 +13,7 @@ version = 1.1.0
 
 # kivy_garden.mapview : carte OSM ; requests + dépendances pour l'API Supabase ;
 # plyer + pyjnius : GPS Android
-requirements = python3,kivy==2.3.0,kivy_garden.mapview,requests,urllib3,idna,charset-normalizer,certifi,plyer,pyjnius,android
+requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,kivy_garden.mapview,requests,urllib3,idna,charset-normalizer,certifi,plyer,pyjnius,android
 
 icon.filename = %(source.dir)s/assets/icon.png
 presplash.filename = %(source.dir)s/assets/presplash.png
@@ -25,6 +25,7 @@ fullscreen = 0
 android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION
 
 android.api = 33
+android.ndk = 25b
 android.minapi = 21
 android.ndk_api = 21
 android.archs = arm64-v8a,armeabi-v7a
