@@ -1,7 +1,0 @@
-# Dépendances pour lancer l'app sur PC (python main.py)
-# Pour compiler l'APK, voir "requirements" dans buildozer.spec
-kivy==2.3.0
-kivy_garden.mapview
-requests
-plyer
-certifi

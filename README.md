@@ -1,56 +1,54 @@
 # Orientation J.P.
 
-Application mobile de course d'orientation — **Collège Jean Prévost, Villard-de-Lans**.
-Carte OpenStreetMap, positions en direct, balises à poinçons 3×3, navigation vers une balise, mode privé et panel admin.
+Application Android de course d'orientation — **Collège Jean Prévost, Villard-de-Lans**.
+Kotlin natif, Jetpack Compose, carte OpenStreetMap (osmdroid), backend Supabase.
+
+> L'ancienne version Python/Kivy est conservée sur la branche `legacy-kivy`.
 
 ## Fonctionnalités
 
 - Carte OSM interactive (pincer pour zoomer), départ au Pont de l'Amour
-- Position des autres coureurs en temps réel (mode privé pour se cacher)
-- Balises : on reproduit le motif de poinçons vu sur la balise (grille 3×3) ; la validation exige d'être à moins de 25 m (si le GPS est actif)
-- « Y aller » : ligne + distance + cap jusqu'à la balise
+- Position des autres coureurs en direct (mode privé pour se cacher)
+- Balises : on reproduit le motif de poinçons vu sur la balise (grille 3×3) ; validation à moins de 25 m
+- « Y aller » : ligne, distance et cap jusqu'à la balise
 - Recherche et liste des balises
 - Panel admin : statistiques, ajout de balise au centre de la carte, suppression
 
 ## Mise en route
 
 ### 1. Base de données (Supabase)
+Exécuter `supabase_setup.sql` dans **SQL Editor** (une fois, en remplaçant `CHANGE_MOI` par le mot de passe admin).
+Le mot de passe admin est vérifié côté serveur : il n'est ni dans le code ni dans l'APK.
+Si le projet est en pause (offre gratuite), le restaurer depuis le dashboard.
 
-1. Si le projet est en pause (offre gratuite, 7 jours d'inactivité), le **restaurer** depuis le dashboard Supabase.
-2. Ouvrir `supabase_setup.sql`, remplacer `CHANGE_MOI` par ton mot de passe admin, puis l'exécuter dans **SQL Editor**.
+### 2. Compiler l'APK
+- **GitHub Actions** : chaque push sur `main` compile l'APK (≈ 5-8 min) → onglet *Actions* → artifact `orientation-jp-debug`.
+- **Android Studio** : ouvrir le dossier, *Run*.
+- **Ligne de commande** : `./gradlew assembleDebug` → `app/build/outputs/apk/debug/`.
 
-Le mot de passe admin n'est **plus dans l'application** : il est vérifié côté serveur (fonctions `admin_*`), donc personne ne peut le lire dans l'APK ni dans GitHub.
-
-### 2. Tester sur PC
-
-```bash
-pip install -r requirements.txt
-python main.py
-```
-
-Sans GPS, la position par défaut (Pont de l'Amour) est utilisée.
-
-### 3. Compiler l'APK
-
-- **GitHub Actions** : chaque push sur `main` lance le workflow *Build Android APK* (20-30 min) ; l'APK est dans les *artifacts*.
-- **En local** : `buildozer android debug` → `bin/*.apk`.
+### 3. Installer
+Copier l'APK sur le téléphone et l'ouvrir (autoriser les sources inconnues).
 
 ## Structure
 
 ```
-main.py              application Kivy (écrans, GPS, carte, logique)
-orientation.kv       interface (thème vert / orange)
-api.py               client Supabase (REST + RPC) en threads
-config.py            URL / clé publique Supabase, constantes
-supabase_setup.sql   tables, RLS et fonctions serveur
-assets/              icônes, marqueurs, champs
-buildozer.spec       configuration Android
-.github/workflows/   compilation automatique
+app/src/main/java/org/orientationjp/app/
+  MainActivity.kt         point d'entrée, permissions, navigation
+  AppViewModel.kt         état et logique (session, GPS, réseau, balises, admin)
+  SupabaseApi.kt          client REST / RPC Supabase
+  LocationTracker.kt      GPS (LocationManager)
+  MapScreen.kt            carte, marqueurs, navigation
+  BeaconSheet.kt          fiche balise + liste
+  SettingsAdminScreens.kt menu et panel admin
+  LoginScreen.kt, Components.kt, Theme.kt, Models.kt, Geo.kt, Prefs.kt, Config.kt
+supabase_setup.sql        tables, RLS et fonctions serveur
 ```
 
-## Dépannage
+## Réglages (`Config.kt`)
+`REQUIRE_PROXIMITY = false` permet de tester la validation d'une balise sans être sur place.
 
-- **« Serveur injoignable »** : le projet Supabase est probablement en pause, ou le téléphone est hors ligne.
+## Dépannage
+- **« Serveur injoignable »** : Supabase en pause ou téléphone hors ligne.
 - **« Base non initialisée »** : `supabase_setup.sql` n'a pas été exécuté.
-- **Carte grise** : pas de connexion (les tuiles sont téléchargées en HTTPS depuis openstreetmap.org).
-- **GPS** : autoriser la localisation dans les réglages Android, tester en extérieur.
+- **Carte grise** : pas de connexion.
+- **Pas de position** : autoriser la localisation, tester en extérieur.
