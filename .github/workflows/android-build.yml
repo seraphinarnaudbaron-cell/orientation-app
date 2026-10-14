@@ -10,6 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
     
     steps:
     - name: Checkout code
@@ -50,14 +51,17 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install --upgrade wheel setuptools
-        pip install Cython==0.29.33
+        pip install Cython==0.29.37
         pip install buildozer
+
+    - name: Check Python syntax (fail fast)
+      run: python -m py_compile main.py api.py config.py
     
     - name: Cache Buildozer global directory
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-global-${{ hashFiles('buildozer.spec') }}-v3
+        key: buildozer-global-${{ hashFiles('buildozer.spec') }}-v4
         restore-keys: |
           buildozer-global-
     
@@ -65,7 +69,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: buildozer-project-${{ hashFiles('buildozer.spec') }}-v3
+        key: buildozer-project-${{ hashFiles('buildozer.spec') }}-v4
         restore-keys: |
           buildozer-project-
     

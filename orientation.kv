@@ -1,0 +1,615 @@
+#:import dp kivy.metrics.dp
+#:import sp kivy.metrics.sp
+#:import hex kivy.utils.get_color_from_hex
+#:import Window kivy.core.window.Window
+#:set GREEN '#1B4332'
+#:set GREEN2 '#2D6A4F'
+#:set ORANGE '#F77F00'
+#:set ORANGE_DARK '#D96C00'
+#:set BG '#F6F7F2'
+#:set TEXT '#1F2933'
+#:set MUTED '#6B7280'
+#:set FIELD '#EEF0EA'
+
+# ------------------------------------------------------------------ widgets
+<Card@BoxLayout>:
+    canvas.before:
+        Color:
+            rgba: 0, 0, 0, 0.10
+        RoundedRectangle:
+            pos: self.x, self.y - dp(2)
+            size: self.size
+            radius: [dp(18)]
+        Color:
+            rgba: 1, 1, 1, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(18)]
+
+<Title@Label>:
+    color: hex(TEXT)
+    bold: True
+    font_size: sp(18)
+    halign: 'left'
+    valign: 'middle'
+    text_size: self.width, None
+    size_hint_y: None
+    height: max(dp(30), self.texture_size[1])
+
+<Body@Label>:
+    color: hex(MUTED)
+    font_size: sp(14)
+    halign: 'left'
+    valign: 'middle'
+    text_size: self.width, None
+    size_hint_y: None
+    height: max(dp(22), self.texture_size[1])
+
+<PrimaryButton@Button>:
+    background_normal: ''
+    background_down: ''
+    background_color: 0, 0, 0, 0
+    color: 1, 1, 1, 1
+    bold: True
+    font_size: sp(16)
+    size_hint_y: None
+    height: dp(52)
+    canvas.before:
+        Color:
+            rgba: hex(ORANGE) if self.state == 'normal' else hex(ORANGE_DARK)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(14)]
+
+<SecondaryButton@Button>:
+    background_normal: ''
+    background_down: ''
+    background_color: 0, 0, 0, 0
+    color: 1, 1, 1, 1
+    bold: True
+    font_size: sp(15)
+    size_hint_y: None
+    height: dp(48)
+    canvas.before:
+        Color:
+            rgba: hex(GREEN2) if self.state == 'normal' else hex(GREEN)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(14)]
+
+<GhostButton@Button>:
+    background_normal: ''
+    background_down: ''
+    background_color: 0, 0, 0, 0
+    color: hex(GREEN2)
+    bold: True
+    font_size: sp(15)
+    size_hint_y: None
+    height: dp(48)
+    canvas.before:
+        Color:
+            rgba: hex(FIELD) if self.state == 'normal' else hex('#E0E4DA')
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(14)]
+
+<RoundInput@TextInput>:
+    multiline: False
+    write_tab: False
+    background_normal: 'assets/field.png'
+    background_active: 'assets/field_focus.png'
+    background_disabled_normal: 'assets/field.png'
+    border: [dp(18), dp(18), dp(18), dp(18)]
+    background_color: 1, 1, 1, 1
+    foreground_color: hex(TEXT)
+    hint_text_color: hex('#6B7280')
+    cursor_color: hex(ORANGE)
+    font_size: sp(16)
+    size_hint_y: None
+    height: dp(48)
+    padding: [dp(14), (self.height - self.line_height) / 2]
+
+<ToggleChip@ToggleButton>:
+    background_normal: ''
+    background_down: ''
+    background_color: 0, 0, 0, 0
+    color: hex(MUTED) if self.state == 'normal' else (1, 1, 1, 1)
+    bold: True
+    font_size: sp(15)
+    size_hint_y: None
+    height: dp(48)
+    canvas.before:
+        Color:
+            rgba: hex(FIELD) if self.state == 'normal' else hex(GREEN2)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(14)]
+
+<FabButton@Button>:
+    background_normal: ''
+    background_down: ''
+    background_color: 0, 0, 0, 0
+    color: hex(GREEN)
+    bold: True
+    font_size: sp(15)
+    size_hint: None, None
+    size: dp(52), dp(52)
+    canvas.before:
+        Color:
+            rgba: 0, 0, 0, 0.14
+        Ellipse:
+            pos: self.x, self.y - dp(2)
+            size: self.size
+        Color:
+            rgba: (1, 1, 1, 1) if self.state == 'normal' else (0.9, 0.92, 0.9, 1)
+        Ellipse:
+            pos: self.pos
+            size: self.size
+
+<PunchCell>:
+    background_normal: ''
+    background_down: ''
+    background_color: 0, 0, 0, 0
+    canvas.before:
+        Color:
+            rgba: hex(FIELD) if self.state == 'normal' else hex(GREEN)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(12)]
+        Color:
+            rgba: (0, 0, 0, 0) if self.state == 'normal' else hex(ORANGE)
+        Ellipse:
+            pos: self.center_x - dp(11), self.center_y - dp(11)
+            size: dp(22), dp(22)
+
+<Toast>:
+    size_hint: None, None
+    size: self.texture_size[0] + dp(36), self.texture_size[1] + dp(22)
+    pos_hint: {'center_x': .5}
+    y: dp(110)
+    opacity: 0
+    color: 1, 1, 1, 1
+    font_size: sp(14)
+    halign: 'center'
+    text_size: Window.width - dp(72), None
+    canvas.before:
+        Color:
+            rgba: 0.1, 0.12, 0.11, 0.92
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(20)]
+
+# ------------------------------------------------------------------ login
+<LoginScreen>:
+    name: 'login'
+    canvas.before:
+        Color:
+            rgba: hex(GREEN)
+        Rectangle:
+            pos: self.pos
+            size: self.size
+        Color:
+            rgba: hex(GREEN2)
+        Ellipse:
+            pos: self.right - dp(170), self.top - dp(150)
+            size: dp(340), dp(340)
+        Color:
+            rgba: 0.97, 0.5, 0, 0.9
+        Ellipse:
+            pos: self.x - dp(70), self.y - dp(60)
+            size: dp(170), dp(170)
+    BoxLayout:
+        orientation: 'vertical'
+        padding: dp(24), dp(16)
+        spacing: dp(14)
+        Widget:
+            size_hint_y: 0.1
+        Image:
+            source: 'assets/icon.png'
+            size_hint_y: None
+            height: dp(92)
+        Label:
+            text: 'Orientation J.P.'
+            font_size: sp(30)
+            bold: True
+            color: 1, 1, 1, 1
+            size_hint_y: None
+            height: dp(40)
+        Label:
+            text: 'Collège Jean Prévost · Villard-de-Lans'
+            font_size: sp(14)
+            color: 1, 1, 1, 0.8
+            size_hint_y: None
+            height: dp(24)
+        Widget:
+            size_hint_y: None
+            height: dp(10)
+        Card:
+            orientation: 'vertical'
+            padding: dp(20)
+            spacing: dp(12)
+            size_hint_y: None
+            height: self.minimum_height
+            Title:
+                text: 'Ton nom de coureur'
+            RoundInput:
+                id: username_input
+                hint_text: 'ex. Léa'
+                text: root.prefill_name
+                on_text_validate: app.start_session(self.text, private_chip.state == 'down')
+            ToggleChip:
+                id: private_chip
+                state: 'down' if root.prefill_private else 'normal'
+                text: 'Mode privé : position cachée' if self.state == 'down' else 'Je partage ma position'
+            PrimaryButton:
+                text: 'Commencer'
+                on_release: app.start_session(username_input.text, private_chip.state == 'down')
+        Widget:
+
+# ------------------------------------------------------------------ carte
+<MapScreen>:
+    name: 'map'
+    FloatLayout:
+        MapView:
+            id: mapview
+            lat: app.default_lat
+            lon: app.default_lon
+            zoom: app.default_zoom
+        # barre du haut
+        Card:
+            size_hint: None, None
+            size: root.width - dp(20), dp(60)
+            pos_hint: {'center_x': .5}
+            y: root.height - self.height - dp(10)
+            padding: dp(8)
+            spacing: dp(8)
+            RoundInput:
+                id: search_input
+                hint_text: 'Chercher une balise'
+                size_hint_y: None
+                height: dp(44)
+                pos_hint: {'center_y': .5}
+                on_text_validate: app.search_beacon(self.text)
+            GhostButton:
+                text: 'Liste'
+                size_hint: None, None
+                size: dp(64), dp(44)
+                pos_hint: {'center_y': .5}
+                on_release: app.open_beacon_list()
+            GhostButton:
+                text: 'Menu'
+                size_hint: None, None
+                size: dp(64), dp(44)
+                pos_hint: {'center_y': .5}
+                on_release: app.go('settings')
+        # bandeau de navigation
+        BoxLayout:
+            size_hint: None, None
+            size: root.width - dp(20), dp(46) if root.target_text else 0
+            pos_hint: {'center_x': .5}
+            y: root.height - dp(60) - dp(10) - dp(8) - self.height
+            opacity: 1 if root.target_text else 0
+            disabled: not root.target_text
+            padding: dp(14), dp(4), dp(4), dp(4)
+            canvas.before:
+                Color:
+                    rgba: hex(GREEN)
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(16)]
+            Label:
+                text: root.target_text
+                color: 1, 1, 1, 1
+                bold: True
+                font_size: sp(14)
+                halign: 'left'
+                valign: 'middle'
+                text_size: self.size
+            Button:
+                text: 'Annuler'
+                size_hint_x: None
+                width: dp(78)
+                background_normal: ''
+                background_color: 0, 0, 0, 0
+                color: hex('#FFC27A')
+                bold: True
+                on_release: app.clear_target()
+        # boutons flottants
+        FabButton:
+            text: '+'
+            font_size: sp(24)
+            x: root.width - self.width - dp(14)
+            y: dp(190)
+            on_release: mapview.zoom = min(mapview.zoom + 1, 19)
+        FabButton:
+            text: '-'
+            font_size: sp(26)
+            x: root.width - self.width - dp(14)
+            y: dp(130)
+            on_release: mapview.zoom = max(mapview.zoom - 1, 3)
+        FabButton:
+            text: 'Moi'
+            x: root.width - self.width - dp(14)
+            y: dp(70)
+            on_release: app.recenter()
+        # statut
+        Card:
+            size_hint: None, None
+            size: root.width - dp(20), dp(44)
+            x: dp(10)
+            y: dp(10)
+            padding: dp(14), 0
+            Label:
+                text: root.status_text
+                color: hex(TEXT)
+                font_size: sp(13)
+                halign: 'left'
+                valign: 'middle'
+                text_size: self.size
+
+# ------------------------------------------------------------------ fiche balise
+<BeaconSheet>:
+    size_hint: 0.92, None
+    height: min(sheet_card.minimum_height, Window.height * 0.94)
+    background: ''
+    background_color: 0, 0, 0, 0
+    overlay_color: 0, 0, 0, 0.5
+    Card:
+        id: sheet_card
+        orientation: 'vertical'
+        padding: dp(18)
+        spacing: dp(8)
+        Title:
+            text: root.title_text
+            font_size: sp(22)
+        Body:
+            text: root.subtitle
+        Body:
+            text: root.description
+        Body:
+            text: 'Reproduis les poinçons vus sur la balise :'
+            color: hex(TEXT)
+        GridLayout:
+            id: grid
+            cols: 3
+            spacing: dp(8)
+            size_hint: None, None
+            size: dp(186), dp(186)
+            pos_hint: {'center_x': .5}
+        Label:
+            text: root.feedback
+            color: hex(GREEN2) if root.feedback_ok else hex('#C62828')
+            bold: True
+            font_size: sp(14)
+            size_hint_y: None
+            height: dp(26)
+            halign: 'center'
+            text_size: self.width, None
+        PrimaryButton:
+            text: 'Valider'
+            disabled: root.done
+            on_release: root.validate()
+        BoxLayout:
+            size_hint_y: None
+            height: dp(48)
+            spacing: dp(10)
+            SecondaryButton:
+                text: 'Y aller'
+                on_release: root.go_there()
+            GhostButton:
+                text: 'Fermer'
+                on_release: root.dismiss()
+
+# ------------------------------------------------------------------ liste
+<BeaconListSheet>:
+    size_hint: 0.92, 0.7
+    background: ''
+    background_color: 0, 0, 0, 0
+    overlay_color: 0, 0, 0, 0.5
+    Card:
+        orientation: 'vertical'
+        padding: dp(16)
+        spacing: dp(8)
+        Title:
+            text: 'Balises'
+            font_size: sp(22)
+        ScrollView:
+            bar_width: dp(3)
+            GridLayout:
+                id: rows
+                cols: 1
+                spacing: dp(8)
+                size_hint_y: None
+                height: self.minimum_height
+        GhostButton:
+            text: 'Fermer'
+            on_release: root.dismiss()
+
+# ------------------------------------------------------------------ réglages
+<SettingsScreen>:
+    name: 'settings'
+    canvas.before:
+        Color:
+            rgba: hex(BG)
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    BoxLayout:
+        orientation: 'vertical'
+        padding: dp(16)
+        spacing: dp(14)
+        BoxLayout:
+            size_hint_y: None
+            height: dp(48)
+            spacing: dp(10)
+            GhostButton:
+                text: 'Retour'
+                size_hint_x: None
+                width: dp(90)
+                on_release: app.go('map')
+            Title:
+                text: 'Menu'
+                font_size: sp(22)
+        Card:
+            orientation: 'vertical'
+            padding: dp(18)
+            spacing: dp(10)
+            size_hint_y: None
+            height: self.minimum_height
+            Title:
+                text: 'Coureur : ' + app.username
+            Body:
+                text: 'En mode privé, ta position n\'est plus envoyée et tu disparais de la carte des autres.'
+                height: dp(60)
+            ToggleChip:
+                id: private_chip
+                state: 'down' if app.private_mode else 'normal'
+                text: 'Mode privé : position cachée' if self.state == 'down' else 'Je partage ma position'
+                on_release: app.set_private(self.state == 'down')
+        Card:
+            orientation: 'vertical'
+            padding: dp(18)
+            spacing: dp(10)
+            size_hint_y: None
+            height: self.minimum_height
+            SecondaryButton:
+                text: 'Panel admin'
+                on_release: app.go('admin')
+            GhostButton:
+                text: 'Changer de nom'
+                on_release: app.logout()
+        Label:
+            text: 'Version ' + app.version_text
+            color: hex(MUTED)
+            font_size: sp(12)
+            size_hint_y: None
+            height: dp(24)
+        Widget:
+
+# ------------------------------------------------------------------ admin
+<AdminScreen>:
+    name: 'admin'
+    canvas.before:
+        Color:
+            rgba: hex(BG)
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    BoxLayout:
+        orientation: 'vertical'
+        padding: dp(16)
+        spacing: dp(12)
+        BoxLayout:
+            size_hint_y: None
+            height: dp(48)
+            spacing: dp(10)
+            GhostButton:
+                text: 'Retour'
+                size_hint_x: None
+                width: dp(90)
+                on_release: root.leave()
+            Title:
+                text: 'Panel admin'
+                font_size: sp(22)
+        FloatLayout:
+            # --- verrouillé
+            Card:
+                id: locked_box
+                orientation: 'vertical'
+                padding: dp(18)
+                spacing: dp(12)
+                size_hint: 1, None
+                height: self.minimum_height
+                x: self.parent.x
+                y: self.parent.top - self.height
+                opacity: 0 if root.unlocked else 1
+                disabled: root.unlocked
+                Title:
+                    text: 'Accès réservé'
+                RoundInput:
+                    id: pw_input
+                    hint_text: 'Mot de passe admin'
+                    password: True
+                    on_text_validate: root.unlock(self.text)
+                PrimaryButton:
+                    text: 'Se connecter'
+                    on_release: root.unlock(pw_input.text)
+            # --- déverrouillé
+            ScrollView:
+                pos: self.parent.pos
+                opacity: 1 if root.unlocked else 0
+                disabled: not root.unlocked
+                bar_width: dp(3)
+                GridLayout:
+                    id: panel
+                    cols: 1
+                    spacing: dp(12)
+                    padding: 0, 0, 0, dp(20)
+                    size_hint_y: None
+                    height: self.minimum_height
+                    Card:
+                        orientation: 'vertical'
+                        padding: dp(16)
+                        spacing: dp(6)
+                        size_hint_y: None
+                        height: self.minimum_height
+                        Title:
+                            text: 'Statistiques'
+                        Body:
+                            text: root.stats_text
+                            color: hex(TEXT)
+                            height: dp(100)
+                        GhostButton:
+                            text: 'Actualiser'
+                            height: dp(40)
+                            on_release: root.refresh()
+                    Card:
+                        orientation: 'vertical'
+                        padding: dp(16)
+                        spacing: dp(10)
+                        size_hint_y: None
+                        height: self.minimum_height
+                        Title:
+                            text: 'Nouvelle balise'
+                        Body:
+                            text: 'Place la carte sur l\'endroit voulu (le centre de l\'écran sert de position), puis coche les poinçons.'
+                            height: dp(44)
+                        RoundInput:
+                            id: new_name
+                            hint_text: 'Nom (ex. Balise 4)'
+                        RoundInput:
+                            id: new_desc
+                            hint_text: 'Description'
+                        GridLayout:
+                            id: new_grid
+                            cols: 3
+                            spacing: dp(8)
+                            size_hint: None, None
+                            size: dp(150), dp(150)
+                            pos_hint: {'center_x': .5}
+                        PrimaryButton:
+                            text: 'Ajouter ici'
+                            on_release: root.add_beacon()
+                    Card:
+                        id: list_card
+                        orientation: 'vertical'
+                        padding: dp(16)
+                        spacing: dp(8)
+                        size_hint_y: None
+                        height: self.minimum_height
+                        Title:
+                            text: 'Balises existantes'
+                        GridLayout:
+                            id: admin_rows
+                            cols: 1
+                            spacing: dp(8)
+                            size_hint_y: None
+                            height: self.minimum_height

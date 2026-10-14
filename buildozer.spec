@@ -1,54 +1,38 @@
 [app]
 
-# Nom de l'application
-title = Orientation-J.P.
-
-# Nom du package (doit être unique)
+title = Orientation J.P.
 package.name = orientationjp
 package.domain = org.orientationjp
 
-# Fichier source principal
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json
+source.exclude_dirs = .git,.github,.buildozer,bin,__pycache__,tests
+source.exclude_patterns = *.sh,*.sql,Dockerfile,README.md,.gitignore
 
-# Version de l'application
-version = 1.0.0
+version = 1.1.0
 
-# Dépendances Python (simplifié)
-requirements = python3,kivy==2.3.0,requests,plyer,certifi
+# kivy_garden.mapview : carte OSM ; requests + dépendances pour l'API Supabase ;
+# plyer + pyjnius : GPS Android
+requirements = python3,kivy==2.3.0,kivy_garden.mapview,requests,urllib3,idna,charset-normalizer,certifi,plyer,pyjnius,android
 
-# Presplash et icône (optionnel, décommenter si tu as les fichiers)
-#icon.filename = %(source.dir)s/icon.png
-#presplash.filename = %(source.dir)s/presplash.png
+icon.filename = %(source.dir)s/assets/icon.png
+presplash.filename = %(source.dir)s/assets/presplash.png
+android.presplash_color = #1B4332
 
-# Orientation supportée
 orientation = portrait
+fullscreen = 0
 
-# Permissions Android
 android.permissions = INTERNET,ACCESS_FINE_LOCATION,ACCESS_COARSE_LOCATION
 
-# Fonctionnalités Android - RETIRÉ car non supporté par buildozer
-# android.features = android.hardware.location.gps
-
-# API Android cible
-android.api = 31
+android.api = 33
 android.minapi = 21
-
-# Architecture cible
+android.ndk_api = 21
 android.archs = arm64-v8a,armeabi-v7a
-
-# Accepter les licences SDK automatiquement
 android.accept_sdk_license = True
 
-# Mode debug
-android.debug = True
-
-# Log level pour debugging
-log_level = 2
-warn_on_root = 1
+# Évite l'extraction de l'APK à chaque lancement
+android.allow_backup = False
 
 [buildozer]
-
-# Répertoire de build
 log_level = 2
 warn_on_root = 1

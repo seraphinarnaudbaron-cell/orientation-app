@@ -1,24 +1,28 @@
-# Configuration de l'application Orientation-J.P.
-# NE PAS COMMITER CE FICHIER DANS UN REPO PUBLIC
+"""Configuration de l'application Orientation-J.P.
 
-import hashlib
+La clé ANON de Supabase est conçue pour être publique : la sécurité repose sur
+les politiques RLS définies dans supabase_setup.sql.
+Le mot de passe admin n'est PLUS stocké dans l'application (il serait lisible
+dans l'APK) : il est vérifié côté serveur par les fonctions SQL admin_*.
+"""
 
-# Configuration Supabase
 SUPABASE_URL = "https://ceypqwcxflnqzcggyqor.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNleXBxd2N4ZmxucXpjZ2d5cW9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2NjcxMjUsImV4cCI6MjA3OTI0MzEyNX0.slMB-xuck2dajI85Ha-nPXnnaitWpFUmy4sahXMH-cA"
+SUPABASE_ANON_KEY = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNleXBxd2N4ZmxucXpjZ2d5cW9yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2NjcxMjUsImV4cCI6MjA3OTI0MzEyNX0.slMB-xuck2dajI85Ha-nPXnnaitWpFUmy4sahXMH-cA"
+)
 
-# Intervalle de mise à jour de la position (en secondes)
+# Intervalle d'envoi / rafraîchissement des positions (secondes)
 LOCATION_UPDATE_INTERVAL = 20
 
-# Coordonnées de démarrage - Pont de l'Amour, Villard-de-Lans
+# Une position plus vieille que ça n'est plus affichée (secondes)
+POSITION_MAX_AGE = 120
+
+# Départ : Pont de l'Amour, Villard-de-Lans
 DEFAULT_LATITUDE = 45.0617
 DEFAULT_LONGITUDE = 5.56722
 DEFAULT_ZOOM = 16
 
-# Mot de passe admin (hashé en SHA-256)
-# Mot de passe original : adminator_38250
-ADMIN_PASSWORD_HASH = hashlib.sha256("adminator_38250".encode()).hexdigest()
+# Distance (m) à laquelle une balise est considérée comme "atteinte"
+BEACON_REACH_METERS = 25
 
-def verify_admin_password(password):
-    """Vérifie si le mot de passe admin est correct"""
-    return hashlib.sha256(password.encode()).hexdigest() == ADMIN_PASSWORD_HASH
+USER_AGENT = "OrientationJP/1.0 (Collège Jean Prévost, Villard-de-Lans)"
