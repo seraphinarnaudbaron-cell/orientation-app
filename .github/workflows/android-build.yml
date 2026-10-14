@@ -75,7 +75,19 @@ jobs:
     
     - name: Build with Buildozer
       run: |
-        buildozer android debug
+        set -o pipefail
+        if ! buildozer android debug 2>&1 | tee build.log; then
+          python3 - <<'PY'
+        import re
+        lines = open("build.log", errors="replace").read().splitlines()
+        def esc(t):
+            return t.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+        errs = [l for l in lines if re.search(r"error|failed|exception|not found|No such", l, re.I)][-25:]
+        print("::error title=Build errors (filtered)::" + esc("\n".join(errs))[:3500])
+        print("::error title=Build log tail::" + esc("\n".join(lines[-45:]))[:3500])
+        PY
+          exit 1
+        fi
       env:
         BUILDOZER_LOG_LEVEL: 2
     
@@ -100,4 +112,4 @@ jobs:
         name: buildozer-logs
         path: |
           .buildozer/android/platform/build-*/
-          *.log
+          build.log
