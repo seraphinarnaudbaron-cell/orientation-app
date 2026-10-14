@@ -55,7 +55,7 @@ def get_beacons():
 
 def get_positions():
     since = datetime.now(timezone.utc) - timedelta(seconds=config.POSITION_MAX_AGE)
-    return select("positions", {
+    return select("runner_positions", {
         "select": "username,latitude,longitude",
         "updated_at": "gte." + since.strftime("%Y-%m-%dT%H:%M:%SZ"),
     })

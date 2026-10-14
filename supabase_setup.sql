@@ -1,7 +1,9 @@
 -- =====================================================================
 --  Orientation-J.P. — installation de la base Supabase
 --  À exécuter une fois dans : Supabase > SQL Editor.
---  Le script est rejouable (idempotent).
+--  Le script est rejouable (idempotent). Il crée ses propres tables
+--  (runner_positions, app_events, admin_secret) et complète `beacons` ;
+--  les autres tables existantes ne sont pas modifiées.
 --
 --  ⚠️  Avant de l'exécuter, remplace CHANGE_MOI par ton nouveau mot de
 --  passe admin (à la fin du fichier). Ne le mets jamais dans le code de l'app.
@@ -10,7 +12,7 @@
 create extension if not exists pgcrypto with schema extensions;
 
 -- ---------- Tables ----------------------------------------------------
-create table if not exists public.positions (
+create table if not exists public.runner_positions (
   username   text primary key check (char_length(username) between 1 and 30),
   latitude   double precision not null check (latitude between -90 and 90),
   longitude  double precision not null check (longitude between -180 and 180),
@@ -29,14 +31,7 @@ create table if not exists public.beacons (
 -- Si la table beacons existait déjà sans colonne name :
 alter table public.beacons add column if not exists name text not null default '';
 
-create table if not exists public.paths (
-  id         bigint generated always as identity primary key,
-  name       text not null default '',
-  points     jsonb not null default '[]'::jsonb,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists public.app_stats (
+create table if not exists public.app_events (
   id         bigint generated always as identity primary key,
   username   text,
   event      text not null,
@@ -49,23 +44,18 @@ create table if not exists public.admin_secret (
 );
 
 -- ---------- Row Level Security ---------------------------------------
-alter table public.positions    enable row level security;
+alter table public.runner_positions    enable row level security;
 alter table public.beacons      enable row level security;
-alter table public.paths        enable row level security;
-alter table public.app_stats    enable row level security;
+alter table public.app_events    enable row level security;
 alter table public.admin_secret enable row level security;
 
-drop policy if exists "lecture positions récentes" on public.positions;
-create policy "lecture positions récentes" on public.positions
+drop policy if exists "lecture positions récentes" on public.runner_positions;
+create policy "lecture positions récentes" on public.runner_positions
   for select to anon, authenticated
   using (updated_at > now() - interval '5 minutes');
 
 drop policy if exists "lecture balises" on public.beacons;
 create policy "lecture balises" on public.beacons
-  for select to anon, authenticated using (true);
-
-drop policy if exists "lecture chemins" on public.paths;
-create policy "lecture chemins" on public.paths
   for select to anon, authenticated using (true);
 
 -- Aucune politique d'écriture : toute écriture passe par les fonctions ci-dessous.
@@ -78,7 +68,7 @@ begin
   if p_username is null or char_length(trim(p_username)) not between 1 and 30 then
     raise exception 'Nom invalide';
   end if;
-  insert into public.positions (username, latitude, longitude, updated_at)
+  insert into public.runner_positions (username, latitude, longitude, updated_at)
   values (trim(p_username), p_lat, p_lon, now())
   on conflict (username) do update
     set latitude = excluded.latitude, longitude = excluded.longitude, updated_at = now();
@@ -86,12 +76,12 @@ end $$;
 
 create or replace function public.clear_position(p_username text)
 returns void language sql security definer set search_path = public as $$
-  delete from public.positions where username = trim(p_username);
+  delete from public.runner_positions where username = trim(p_username);
 $$;
 
 create or replace function public.log_event(p_username text, p_event text)
 returns void language sql security definer set search_path = public as $$
-  insert into public.app_stats (username, event)
+  insert into public.app_events (username, event)
   values (left(trim(p_username), 30), left(p_event, 40));
 $$;
 
@@ -140,10 +130,10 @@ begin
   if not public._admin_ok(p_password) then raise exception 'Mot de passe incorrect'; end if;
   return json_build_object(
     'beacons',         (select count(*) from public.beacons),
-    'active_now',      (select count(*) from public.positions where updated_at > now() - interval '2 minutes'),
-    'launches',        (select count(*) from public.app_stats where event = 'launch'),
-    'distinct_users',  (select count(distinct username) from public.app_stats),
-    'validations',     (select count(*) from public.app_stats where event = 'beacon_validated')
+    'active_now',      (select count(*) from public.runner_positions where updated_at > now() - interval '2 minutes'),
+    'launches',        (select count(*) from public.app_events where event = 'launch'),
+    'distinct_users',  (select count(distinct username) from public.app_events),
+    'validations',     (select count(*) from public.app_events where event = 'beacon_validated')
   );
 end $$;
 
