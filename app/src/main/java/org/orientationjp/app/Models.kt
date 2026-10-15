@@ -39,6 +39,7 @@ data class UiState(
     val recenterTick: Int = 0,
     val adminUnlocked: Boolean = false,
     val adminStats: AdminStats? = null,
+    val lastError: String = "",
 ) {
     fun distanceTo(b: Beacon): Double? {
         val la = myLat

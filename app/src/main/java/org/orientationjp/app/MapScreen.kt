@@ -263,7 +263,7 @@ private fun statusText(state: UiState): String {
     if (state.privateMode) {
         parts.add("mode privé")
     } else if (state.online == false) {
-        parts.add("hors ligne")
+        parts.add("hors ligne" + (if (state.lastError.isNotEmpty()) " (" + state.lastError + ")" else ""))
     } else if (state.online == true) {
         val n = state.runners.size
         parts.add(n.toString() + " autre" + (if (n > 1) "s" else "") + " en ligne")

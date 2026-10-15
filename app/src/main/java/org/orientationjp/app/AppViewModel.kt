@@ -74,7 +74,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** force = true pour une action demandée par l'utilisateur : on affiche toujours l'erreur. */
     private fun onNetworkError(e: Exception, force: Boolean = false) {
         val wasOffline = _state.value.online == false
-        _state.update { it.copy(online = false) }
+        val detail = e.javaClass.simpleName + ": " + (e.message ?: "").take(70)
+        _state.update { it.copy(online = false, lastError = detail) }
         if (e is ApiException) {
             val m = e.message.orEmpty()
             if (m.contains("schema cache") || m.contains("Could not find")) {
@@ -83,9 +84,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 say(m.take(90))
             }
         } else if (force) {
-            say("Erreur : " + (e.message ?: e.javaClass.simpleName).take(90))
+            say("Erreur : " + detail.take(90))
         } else if (!wasOffline) {
-            say("Serveur injoignable (connexion coupée ou base en pause)")
+            say("Serveur injoignable : " + detail.take(90))
         }
     }
 
@@ -224,7 +225,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val list = withContext(Dispatchers.IO) { SupabaseApi.getBeacons() }
             _state.update { st ->
                 val still = st.target?.let { t -> list.firstOrNull { it.id == t.id } }
-                st.copy(beacons = list, online = true, target = still)
+                st.copy(beacons = list, online = true, lastError = "", target = still)
             }
         } catch (e: CancellationException) {
             throw e
@@ -236,7 +237,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun refreshRunners() {
         try {
             val list = withContext(Dispatchers.IO) { SupabaseApi.getRunners() }
-            _state.update { st -> st.copy(runners = list.filter { it.name != st.username }, online = true) }
+            _state.update { st -> st.copy(runners = list.filter { it.name != st.username }, online = true, lastError = "") }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
