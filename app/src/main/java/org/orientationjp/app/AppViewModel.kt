@@ -71,7 +71,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         mapZoom = zoom
     }
 
-    private fun onNetworkError(e: Exception) {
+    /** force = true pour une action demandée par l'utilisateur : on affiche toujours l'erreur. */
+    private fun onNetworkError(e: Exception, force: Boolean = false) {
         val wasOffline = _state.value.online == false
         _state.update { it.copy(online = false) }
         if (e is ApiException) {
@@ -81,6 +82,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } else {
                 say(m.take(90))
             }
+        } else if (force) {
+            say("Erreur : " + (e.message ?: e.javaClass.simpleName).take(90))
         } else if (!wasOffline) {
             say("Serveur injoignable (connexion coupée ou base en pause)")
         }
@@ -304,7 +307,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                onNetworkError(e)
+                onNetworkError(e, force = true)
             }
         }
     }
@@ -324,7 +327,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                onNetworkError(e)
+                onNetworkError(e, force = true)
             }
         }
     }
@@ -345,7 +348,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                onNetworkError(e)
+                onNetworkError(e, force = true)
             }
         }
     }
@@ -360,7 +363,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                onNetworkError(e)
+                onNetworkError(e, force = true)
             }
         }
     }

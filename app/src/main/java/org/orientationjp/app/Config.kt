@@ -22,5 +22,6 @@ object Config {
     // Mettre à false pour tester une validation sans être sur place
     const val REQUIRE_PROXIMITY = true
 
-    const val USER_AGENT = "OrientationJP/2.0 (Collège Jean Prévost, Villard-de-Lans)"
+    // ASCII uniquement : OkHttp refuse les accents dans les en-têtes HTTP
+    const val USER_AGENT = "OrientationJP/2.0 (College Jean Prevost, Villard-de-Lans)"
 }
