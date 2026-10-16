@@ -18,7 +18,6 @@ data class AdminStats(
     val activeNow: Int,
     val launches: Int,
     val distinctUsers: Int,
-    val validations: Int,
 )
 
 enum class Screen { Login, Map, Settings, Admin }
@@ -30,7 +29,6 @@ data class UiState(
     val privateMode: Boolean = false,
     val beacons: List<Beacon> = emptyList(),
     val runners: List<Runner> = emptyList(),
-    val validated: Set<Long> = emptySet(),
     val myLat: Double? = null,
     val myLon: Double? = null,
     val gpsStatus: String = "GPS en attente…",
@@ -47,5 +45,3 @@ data class UiState(
         return if (la != null && lo != null) Geo.distance(la, lo, b.lat, b.lon) else null
     }
 }
-
-data class ValidationResult(val ok: Boolean, val message: String)

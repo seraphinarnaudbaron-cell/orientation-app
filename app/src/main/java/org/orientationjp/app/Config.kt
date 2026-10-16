@@ -16,11 +16,8 @@ object Config {
     const val DEFAULT_LON = 5.56722
     const val DEFAULT_ZOOM = 16.0
 
-    // Distance (m) maximale pour valider une balise
+    // Distance (m) à partir de laquelle on considère être arrivé à la balise
     const val BEACON_REACH_M = 25.0
-
-    // Mettre à false pour tester une validation sans être sur place
-    const val REQUIRE_PROXIMITY = true
 
     // ASCII uniquement : OkHttp refuse les accents dans les en-têtes HTTP
     const val USER_AGENT = "OrientationJP/2.0 (College Jean Prevost, Villard-de-Lans)"

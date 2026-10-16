@@ -120,7 +120,6 @@ fun AdminScreen(state: UiState, vm: AppViewModel) {
                         BodyText("Coureurs en ligne (2 min) : " + s.activeNow, TextDark)
                         BodyText("Lancements de l'app : " + s.launches, TextDark)
                         BodyText("Coureurs différents : " + s.distinctUsers, TextDark)
-                        BodyText("Balises validées : " + s.validations, TextDark)
                     }
                     GhostButton("Actualiser", Modifier.fillMaxWidth()) { vm.refreshAdmin() }
                 }

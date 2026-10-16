@@ -226,7 +226,6 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
         BeaconSheet(
             beacon = b,
             state = state,
-            vm = vm,
             onGo = {
                 vm.setTarget(b)
                 selected = null
@@ -252,7 +251,7 @@ private fun targetText(state: UiState, t: Beacon): String {
     val lo = state.myLon
     if (la == null || lo == null) return t.title + " · position inconnue"
     val d = Geo.distance(la, lo, t.lat, t.lon)
-    if (d <= Config.BEACON_REACH_M) return t.title + " : tu y es ! Poinçonne"
+    if (d <= Config.BEACON_REACH_M) return t.title + " : tu y es !"
     val brg = Geo.bearing(la, lo, t.lat, t.lon)
     return t.title + " · " + Geo.format(d) + " · cap " + brg.toInt() + "° " + Geo.compass(brg)
 }
@@ -269,8 +268,7 @@ private fun statusText(state: UiState): String {
         parts.add(n.toString() + " autre" + (if (n > 1) "s" else "") + " en ligne")
     }
     if (state.beacons.isNotEmpty()) {
-        val done = state.beacons.count { it.id in state.validated }
-        parts.add(done.toString() + "/" + state.beacons.size + " validées")
+        parts.add(state.beacons.size.toString() + " balise" + (if (state.beacons.size > 1) "s" else ""))
     }
     return parts.joinToString(" · ")
 }
@@ -304,8 +302,7 @@ private fun syncOverlays(mv: MapView, state: UiState, onBeacon: (Beacon) -> Unit
     for (b in state.beacons) {
         val m = Marker(mv)
         m.position = GeoPoint(b.lat, b.lon)
-        val res = if (b.id in state.validated) R.drawable.beacon_done else R.drawable.beacon
-        m.icon = ContextCompat.getDrawable(ctx, res)
+        m.icon = ContextCompat.getDrawable(ctx, R.drawable.beacon)
         m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
         m.title = b.title
         m.setOnMarkerClickListener { _, _ ->

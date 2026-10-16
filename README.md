@@ -9,7 +9,7 @@ Kotlin natif, Jetpack Compose, carte OpenStreetMap (osmdroid), backend Supabase.
 
 - Carte OSM interactive (pincer pour zoomer), départ au Pont de l'Amour
 - Position des autres coureurs en direct (mode privé pour se cacher)
-- Balises : on reproduit le motif de poinçons vu sur la balise (grille 3×3) ; validation à moins de 25 m
+- Balises : un clic sur une balise affiche son motif de poinçon (grille 3×3) à reproduire sur la carte papier, ou lance « Y aller »
 - « Y aller » : ligne, distance et cap jusqu'à la balise
 - Recherche et liste des balises
 - Panel admin : statistiques, ajout de balise au centre de la carte, suppression
@@ -43,9 +43,6 @@ app/src/main/java/org/orientationjp/app/
   LoginScreen.kt, Components.kt, Theme.kt, Models.kt, Geo.kt, Prefs.kt, Config.kt
 supabase_setup.sql        tables, RLS et fonctions serveur
 ```
-
-## Réglages (`Config.kt`)
-`REQUIRE_PROXIMITY = false` permet de tester la validation d'une balise sans être sur place.
 
 ## Dépannage
 - **« Serveur injoignable »** : Supabase en pause ou téléphone hors ligne.

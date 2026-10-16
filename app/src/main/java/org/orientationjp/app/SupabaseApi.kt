@@ -143,7 +143,6 @@ object SupabaseApi {
             activeNow = o.optInt("active_now"),
             launches = o.optInt("launches"),
             distinctUsers = o.optInt("distinct_users"),
-            validations = o.optInt("validations"),
         )
     }
 }

@@ -30,7 +30,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             loggedIn = prefs.name.isNotBlank(),
             username = prefs.name,
             privateMode = prefs.privateMode,
-            validated = prefs.validated,
         )
     )
     private val tracker = LocationTracker(
@@ -263,30 +262,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setTarget(b: Beacon?) {
         _state.update { it.copy(target = b) }
         if (b != null) say("Direction : " + b.title)
-    }
-
-    /** pattern : 9 caractères '0'/'1' reproduits par le coureur. */
-    fun validate(b: Beacon, pattern: String): ValidationResult {
-        val st = _state.value
-        if (b.id in st.validated) return ValidationResult(true, "Déjà validée")
-        if (Config.REQUIRE_PROXIMITY) {
-            val d = st.distanceTo(b) ?: return ValidationResult(false, "Position GPS indisponible")
-            if (d > Config.BEACON_REACH_M) {
-                return ValidationResult(false, "Trop loin (" + Geo.format(d) + "), max " + Config.BEACON_REACH_M.toInt() + " m")
-            }
-        }
-        if (pattern != b.pattern) return ValidationResult(false, "Ce n'est pas le bon motif, regarde bien.")
-        val newSet = st.validated + b.id
-        prefs.validated = newSet
-        _state.update { it.copy(validated = newSet, target = if (it.target?.id == b.id) null else it.target) }
-        val n = st.username
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                SupabaseApi.logEvent(n, "beacon_validated")
-            } catch (e: Exception) {
-            }
-        }
-        return ValidationResult(true, "Balise validée !")
     }
 
     // ------------------------------------------------------------------ admin

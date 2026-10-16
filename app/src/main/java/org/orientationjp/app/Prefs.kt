@@ -16,11 +16,4 @@ class Prefs(context: Context) {
         set(value) {
             sp.edit().putBoolean("private", value).apply()
         }
-
-    var validated: Set<Long>
-        get() = (sp.getStringSet("validated", emptySet()) ?: emptySet())
-            .mapNotNull { it.toLongOrNull() }.toSet()
-        set(value) {
-            sp.edit().putStringSet("validated", value.map { it.toString() }.toSet()).apply()
-        }
 }

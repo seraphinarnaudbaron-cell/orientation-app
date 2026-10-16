@@ -203,3 +203,32 @@ fun newCells(): SnapshotStateList<Boolean> {
     repeat(9) { l.add(false) }
     return l
 }
+
+/** Affiche un motif de poinçons (9 caractères '0'/'1') en lecture seule. */
+@Composable
+fun PatternView(pattern: String, cell: androidx.compose.ui.unit.Dp = 64.dp) {
+    if (pattern.length != 9) {
+        BodyText("Motif indisponible")
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (row in 0 until 3) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (col in 0 until 3) {
+                    val on = pattern[row * 3 + col] == '1'
+                    Box(
+                        modifier = Modifier
+                            .size(cell)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (on) Green else Field),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (on) {
+                            Box(Modifier.size(cell / 2.2f).clip(CircleShape).background(Orange))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
