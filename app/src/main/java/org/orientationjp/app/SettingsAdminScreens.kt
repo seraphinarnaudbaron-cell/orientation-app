@@ -117,6 +117,7 @@ fun AdminScreen(state: UiState, vm: AppViewModel) {
                         BodyText("Chargement…")
                     } else {
                         BodyText("Balises : " + s.beacons, TextDark)
+                        BodyText("Chemins : " + s.trails, TextDark)
                         BodyText("Coureurs en ligne (2 min) : " + s.activeNow, TextDark)
                         BodyText("Lancements de l'app : " + s.launches, TextDark)
                         BodyText("Coureurs différents : " + s.distinctUsers, TextDark)
@@ -139,6 +140,33 @@ fun AdminScreen(state: UiState, vm: AppViewModel) {
                         name = ""
                         desc = ""
                         for (i in 0 until 9) cells[i] = false
+                    }
+                }
+
+                AppCard {
+                    CardTitle("Chemins")
+                    BodyText(
+                        "Mode créateur : marche le long d'un chemin, l'app enregistre ton parcours. " +
+                            "Quand deux chemins passent à moins de 5 m l'un de l'autre, ils sont reliés " +
+                            "(nœud) : le coureur est guidé le long de tes chemins. " +
+                            "Garde l'écran allumé et l'app au premier plan."
+                    )
+                    PrimaryButton("Créer un chemin") { vm.startRecording() }
+                    if (state.trails.isEmpty()) BodyText("Aucun chemin enregistré.")
+                    for (t in state.trails) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                (if (t.name.isBlank()) "Chemin " + t.id else t.name) + " · " + Geo.format(t.length),
+                                color = TextDark,
+                                fontSize = 14.sp,
+                                modifier = Modifier.weight(1f),
+                            )
+                            GhostButton("Suppr.") { vm.deleteTrail(t) }
+                        }
                     }
                 }
 

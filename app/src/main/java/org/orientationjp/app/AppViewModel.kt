@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +55,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var loopsStarted = false
     private var adminPassword = ""
     private var firstFixDone = false
+    private var graph: TrailGraph? = null
+    private var routeJob: Job? = null
+    private var lastRouteLat = Double.NaN
+    private var lastRouteLon = Double.NaN
 
     init {
         if (_state.value.loggedIn) startSession()
@@ -97,7 +102,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun back() {
         when (_state.value.screen) {
             Screen.Admin -> {
-                lockAdmin()
+                if (!_state.value.recording) lockAdmin()
                 go(Screen.Settings)
             }
             Screen.Settings -> go(Screen.Map)
@@ -129,7 +134,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         prefs.name = ""
-        _state.update { it.copy(username = "", loggedIn = false, target = null, screen = Screen.Login) }
+        _state.update { it.copy(username = "", loggedIn = false, target = null, route = null, recording = false, recorded = emptyList(), screen = Screen.Login) }
     }
 
     fun setPrivate(value: Boolean) {
@@ -163,6 +168,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             while (isActive) {
                 refreshBeacons()
+                refreshTrails()
                 delay(60_000L)
             }
         }
@@ -203,6 +209,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         if (first) viewModelScope.launch { pushPosition() }
+
+        // Mode créateur : on ajoute le point si la précision est correcte et qu'on a bougé d'au moins 2,5 m
+        val st = _state.value
+        if (st.recording && !st.recordPaused && (!loc.hasAccuracy() || loc.accuracy <= 20f)) {
+            val last = st.recorded.lastOrNull()
+            if (last == null || Geo.distance(last.lat, last.lon, loc.latitude, loc.longitude) >= 2.5) {
+                _state.update { it.copy(recorded = it.recorded + GeoPt(loc.latitude, loc.longitude)) }
+            }
+        }
+        recomputeRoute(false)
     }
 
     fun requestRecenter() {
@@ -224,7 +240,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val list = withContext(Dispatchers.IO) { SupabaseApi.getBeacons() }
             _state.update { st ->
                 val still = st.target?.let { t -> list.firstOrNull { it.id == t.id } }
-                st.copy(beacons = list, online = true, lastError = "", target = still)
+                st.copy(beacons = list, online = true, lastError = "", target = still, route = if (still == null) null else st.route)
             }
         } catch (e: CancellationException) {
             throw e
@@ -260,8 +276,114 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------------ balises
     fun setTarget(b: Beacon?) {
-        _state.update { it.copy(target = b) }
+        _state.update { it.copy(target = b, route = null) }
         if (b != null) say("Direction : " + b.title)
+        recomputeRoute(true)
+    }
+
+    // ------------------------------------------------------------------ chemins et itinéraire
+    private suspend fun refreshTrails() {
+        try {
+            val list = withContext(Dispatchers.IO) { SupabaseApi.getTrails() }
+            if (list != _state.value.trails) {
+                val g = withContext(Dispatchers.Default) { TrailGraph(list) }
+                graph = g
+                _state.update { it.copy(trails = list) }
+                recomputeRoute(true)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onNetworkError(e)
+        }
+    }
+
+    /** Recalcule l'itinéraire sur le réseau de chemins (si on a bougé de 3 m ou si force). */
+    private fun recomputeRoute(force: Boolean) {
+        val st = _state.value
+        val t = st.target
+        val la = st.myLat
+        val lo = st.myLon
+        val g = graph
+        if (t == null || la == null || lo == null || g == null) {
+            if (st.route != null) _state.update { it.copy(route = null) }
+            return
+        }
+        if (!force && !lastRouteLat.isNaN() && Geo.distance(lastRouteLat, lastRouteLon, la, lo) < 3.0) return
+        lastRouteLat = la
+        lastRouteLon = lo
+        routeJob?.cancel()
+        routeJob = viewModelScope.launch(Dispatchers.Default) {
+            val r = g.route(la, lo, t.lat, t.lon)
+            _state.update { cur -> if (cur.target?.id == t.id) cur.copy(route = r) else cur }
+        }
+    }
+
+    // ------------------------------------------------------------------ mode créateur de chemin
+    fun startRecording() {
+        val st = _state.value
+        if (!st.adminUnlocked) {
+            say("Connecte-toi en admin d'abord")
+            return
+        }
+        val la = st.myLat
+        val lo = st.myLon
+        val first = if (la != null && lo != null) listOf(GeoPt(la, lo)) else emptyList()
+        _state.update { it.copy(recording = true, recordPaused = false, recorded = first, screen = Screen.Map) }
+        say("Mode créateur : marche le long du chemin")
+    }
+
+    fun toggleRecordPause() {
+        _state.update { it.copy(recordPaused = !it.recordPaused) }
+    }
+
+    fun cancelRecording() {
+        _state.update { it.copy(recording = false, recordPaused = false, recorded = emptyList()) }
+        say("Enregistrement annulé")
+    }
+
+    fun finishRecording(name: String) {
+        val pts = _state.value.recorded
+        if (pts.size < 5 || pathLength(pts) < 10.0) {
+            say("Chemin trop court : marche au moins 10 m")
+            return
+        }
+        val pw = adminPassword
+        if (pw.isEmpty()) {
+            say("Reconnecte-toi en admin pour enregistrer")
+            return
+        }
+        val n = name.trim().ifEmpty { "Chemin" }
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { SupabaseApi.adminAddTrail(pw, n, pts) }
+                _state.update { it.copy(recording = false, recordPaused = false, recorded = emptyList()) }
+                say("Chemin enregistré (" + Geo.format(pathLength(pts)) + ")")
+                refreshTrails()
+                refreshAdmin()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // la trace reste en mémoire : on peut réessayer
+                onNetworkError(e, force = true)
+            }
+        }
+    }
+
+    fun deleteTrail(t: Trail) {
+        val pw = adminPassword
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { SupabaseApi.adminDeleteTrail(pw, t.id) }
+                say("Chemin supprimé")
+                refreshTrails()
+                refreshAdmin()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onNetworkError(e, force = true)
+            }
+        }
     }
 
     // ------------------------------------------------------------------ admin
@@ -300,6 +422,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val stats = withContext(Dispatchers.IO) { SupabaseApi.adminStats(adminPassword) }
                 _state.update { it.copy(adminStats = stats) }
                 refreshBeacons()
+                refreshTrails()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

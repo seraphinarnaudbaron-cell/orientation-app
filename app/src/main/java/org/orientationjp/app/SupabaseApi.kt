@@ -83,6 +83,22 @@ object SupabaseApi {
         return out
     }
 
+    fun getTrails(): List<Trail> {
+        val arr = select("trails", mapOf("select" to "id,name,points", "order" to "id.asc"))
+        val out = ArrayList<Trail>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val raw = o.getJSONArray("points")
+            val pts = ArrayList<GeoPt>(raw.length())
+            for (k in 0 until raw.length()) {
+                val p = raw.getJSONArray(k)
+                pts.add(GeoPt(p.getDouble(0), p.getDouble(1)))
+            }
+            out.add(Trail(o.getLong("id"), o.str("name"), pts))
+        }
+        return out
+    }
+
     fun getRunners(): List<Runner> {
         val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
         fmt.timeZone = TimeZone.getTimeZone("UTC")
@@ -136,10 +152,26 @@ object SupabaseApi {
         rpc("admin_delete_beacon", JSONObject().put("p_password", password).put("p_id", id))
     }
 
+    fun adminAddTrail(password: String, name: String, points: List<GeoPt>) {
+        val arr = JSONArray()
+        for (p in points) {
+            arr.put(JSONArray().put(Math.round(p.lat * 1e6) / 1e6).put(Math.round(p.lon * 1e6) / 1e6))
+        }
+        rpc(
+            "admin_add_trail",
+            JSONObject().put("p_password", password).put("p_name", name).put("p_points", arr),
+        )
+    }
+
+    fun adminDeleteTrail(password: String, id: Long) {
+        rpc("admin_delete_trail", JSONObject().put("p_password", password).put("p_id", id))
+    }
+
     fun adminStats(password: String): AdminStats {
         val o = JSONObject(rpc("admin_stats", JSONObject().put("p_password", password)))
         return AdminStats(
             beacons = o.optInt("beacons"),
+            trails = o.optInt("trails"),
             activeNow = o.optInt("active_now"),
             launches = o.optInt("launches"),
             distinctUsers = o.optInt("distinct_users"),

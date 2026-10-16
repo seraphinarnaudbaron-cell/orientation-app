@@ -1,6 +1,7 @@
 package org.orientationjp.app
 
 import android.graphics.DashPathEffect
+import android.graphics.Paint
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,9 +15,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -93,6 +97,15 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
     var selected by remember { mutableStateOf<Beacon?>(null) }
     var showList by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
+    var showNameDialog by remember { mutableStateOf(false) }
+    var trailName by remember { mutableStateOf("") }
+
+    // Pendant l'enregistrement d'un chemin : écran allumé (le GPS doit rester actif)
+    val view = LocalView.current
+    DisposableEffect(state.recording) {
+        view.keepScreenOn = state.recording
+        onDispose { view.keepScreenOn = false }
+    }
 
     // Recentrage sur ma position quand on le demande (pas au simple retour sur l'écran)
     var seenTick by remember { mutableStateOf(state.recenterTick) }
@@ -187,6 +200,46 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
                     )
                 }
             }
+
+            if (state.recording) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFC62828), RoundedCornerShape(16.dp))
+                        .padding(start = 14.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "● REC " + (if (state.recordPaused) "(pause) " else "") +
+                            Geo.format(pathLength(state.recorded)) + " · " + state.recorded.size + " pts",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        modifier = Modifier.weight(1f).padding(vertical = 12.dp),
+                    )
+                    Text(
+                        if (state.recordPaused) "Reprendre" else "Pause",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        modifier = Modifier.clickable { vm.toggleRecordPause() }.padding(10.dp),
+                    )
+                    Text(
+                        "Fin",
+                        color = Color(0xFFFFE082),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        modifier = Modifier.clickable { showNameDialog = true }.padding(10.dp),
+                    )
+                    Text(
+                        "Annuler",
+                        color = Color(0xFFFFCDD2),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        modifier = Modifier.clickable { vm.cancelRecording() }.padding(10.dp),
+                    )
+                }
+            }
         }
 
         // ---- boutons flottants
@@ -222,6 +275,31 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
         }
     }
 
+    if (showNameDialog) {
+        AlertDialog(
+            onDismissRequest = { showNameDialog = false },
+            title = { Text("Nom du chemin") },
+            text = {
+                RoundField(
+                    value = trailName,
+                    onValueChange = { trailName = it },
+                    hint = "ex. Sentier de la rivière",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.finishRecording(trailName)
+                    trailName = ""
+                    showNameDialog = false
+                }) { Text("Enregistrer") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNameDialog = false }) { Text("Continuer") }
+            },
+        )
+    }
+
     selected?.let { b ->
         BeaconSheet(
             beacon = b,
@@ -252,8 +330,11 @@ private fun targetText(state: UiState, t: Beacon): String {
     if (la == null || lo == null) return t.title + " · position inconnue"
     val d = Geo.distance(la, lo, t.lat, t.lon)
     if (d <= Config.BEACON_REACH_M) return t.title + " : tu y es !"
+    val route = state.route
+    if (route != null) return t.title + " · " + Geo.format(route.lengthM) + " par les chemins"
     val brg = Geo.bearing(la, lo, t.lat, t.lon)
-    return t.title + " · " + Geo.format(d) + " · cap " + brg.toInt() + "° " + Geo.compass(brg)
+    val base = t.title + " · " + Geo.format(d) + " · cap " + brg.toInt() + "° " + Geo.compass(brg)
+    return if (state.trails.isNotEmpty()) base + " (hors chemins)" else base
 }
 
 private fun statusText(state: UiState): String {
@@ -281,13 +362,28 @@ private fun syncOverlays(mv: MapView, state: UiState, onBeacon: (Beacon) -> Unit
     val lo = state.myLon
     val target = state.target
 
+    // Réseau de chemins : visible seulement en mode admin (pour voir ce qui est déjà couvert)
+    if (state.adminUnlocked) {
+        for (t in state.trails) {
+            mv.overlays.add(solidLine(t.points, "#992D6A4F", 6f))
+        }
+    }
+
+    // Trace en cours d'enregistrement
+    if (state.recording && state.recorded.size >= 2) {
+        mv.overlays.add(solidLine(state.recorded, "#E53935", 9f))
+    }
+
+    // Itinéraire vers la balise visée
     if (target != null && la != null && lo != null) {
-        val line = Polyline()
-        line.setPoints(listOf(GeoPoint(la, lo), GeoPoint(target.lat, target.lon)))
-        line.outlinePaint.color = android.graphics.Color.parseColor("#F77F00")
-        line.outlinePaint.strokeWidth = 7f
-        line.outlinePaint.pathEffect = DashPathEffect(floatArrayOf(24f, 16f), 0f)
-        mv.overlays.add(line)
+        val route = state.route
+        if (route != null && route.points.isNotEmpty()) {
+            mv.overlays.add(dashedLine(route.start, route.points.first()))
+            mv.overlays.add(solidLine(route.points, "#F77F00", 10f))
+            mv.overlays.add(dashedLine(route.points.last(), route.end))
+        } else {
+            mv.overlays.add(dashedLine(GeoPt(la, lo), GeoPt(target.lat, target.lon)))
+        }
     }
 
     for (r in state.runners) {
@@ -322,4 +418,23 @@ private fun syncOverlays(mv: MapView, state: UiState, onBeacon: (Beacon) -> Unit
     }
 
     mv.invalidate()
+}
+
+private fun solidLine(points: List<GeoPt>, color: String, width: Float): Polyline {
+    val line = Polyline()
+    line.setPoints(points.map { GeoPoint(it.lat, it.lon) })
+    line.outlinePaint.color = android.graphics.Color.parseColor(color)
+    line.outlinePaint.strokeWidth = width
+    line.outlinePaint.strokeCap = Paint.Cap.ROUND
+    line.outlinePaint.strokeJoin = Paint.Join.ROUND
+    return line
+}
+
+private fun dashedLine(a: GeoPt, b: GeoPt): Polyline {
+    val line = Polyline()
+    line.setPoints(listOf(GeoPoint(a.lat, a.lon), GeoPoint(b.lat, b.lon)))
+    line.outlinePaint.color = android.graphics.Color.parseColor("#F77F00")
+    line.outlinePaint.strokeWidth = 7f
+    line.outlinePaint.pathEffect = DashPathEffect(floatArrayOf(24f, 16f), 0f)
+    return line
 }

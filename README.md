@@ -10,9 +10,10 @@ Kotlin natif, Jetpack Compose, carte OpenStreetMap (osmdroid), backend Supabase.
 - Carte OSM interactive (pincer pour zoomer), départ au Pont de l'Amour
 - Position des autres coureurs en direct (mode privé pour se cacher)
 - Balises : un clic sur une balise affiche son motif de poinçon (grille 3×3) à reproduire sur la carte papier, ou lance « Y aller »
-- « Y aller » : ligne, distance et cap jusqu'à la balise
+- « Y aller » : itinéraire qui suit les chemins enregistrés par l'admin (sinon ligne droite, distance et cap)
 - Recherche et liste des balises
 - Panel admin : statistiques, ajout de balise au centre de la carte, suppression
+- **Mode créateur de chemin** : l'admin marche, le GPS enregistre sa trace. Les traces qui passent à moins de 5 m l'une de l'autre sont reliées (nœuds) ; l'app calcule le plus court chemin (Dijkstra) sur ce réseau et le trace au coureur.
 
 ## Mise en route
 
