@@ -9,17 +9,44 @@ data class Beacon(
     val description: String,
 ) {
     val title: String get() = if (name.isBlank()) "Balise $id" else name
+    /** Numéro affiché et utilisé pour composer un parcours. */
+    val number: Long get() = id
 }
 
-data class GeoPt(val lat: Double, val lon: Double)
+data class GeoPt(val lat: Double, val lon: Double, val ele: Double = Double.NaN)
 
-/** Trace enregistrée par l'admin en marchant. */
-data class Trail(val id: Long, val name: String, val points: List<GeoPt>) {
+/** Trace enregistrée par l'admin : un chemin ("path") ou un obstacle infranchissable ("barrier"). */
+data class Trail(val id: Long, val name: String, val points: List<GeoPt>, val kind: String = "path") {
+    val isBarrier: Boolean get() = kind == "barrier"
     val length: Double get() = pathLength(points)
 }
 
-/** Itinéraire calculé sur le réseau de chemins. start/end = position du coureur et de la balise. */
-data class Route(val start: GeoPt, val points: List<GeoPt>, val end: GeoPt, val lengthM: Double)
+/** Itinéraire sur le réseau de chemins. timeS = durée estimée à pied (formule de Tobler : dénivelé pris en compte). */
+data class Route(
+    val start: GeoPt,
+    val points: List<GeoPt>,
+    val end: GeoPt,
+    val lengthM: Double,
+    val timeS: Double = 0.0,
+    val ascent: Double = 0.0,
+    val descent: Double = 0.0,
+)
+
+/** Un morceau de parcours à dessiner : plein (sur un chemin) ou pointillé (raccord / hors chemin). */
+data class CourseSeg(val points: List<GeoPt>, val dashed: Boolean)
+
+data class CourseLeg(val from: String, val to: String, val lengthM: Double, val timeS: Double, val onTrails: Boolean)
+
+data class Course(
+    val order: List<Beacon>,
+    val finish: GeoPt,
+    val segments: List<CourseSeg>,
+    val legs: List<CourseLeg>,
+    val lengthM: Double,
+    val timeS: Double,
+    val ascent: Double,
+    val descent: Double,
+)
 
 fun pathLength(points: List<GeoPt>): Double {
     var total = 0.0
@@ -62,6 +89,11 @@ data class UiState(
     val recording: Boolean = false,
     val recordPaused: Boolean = false,
     val recorded: List<GeoPt> = emptyList(),
+    val recordKind: String = "path",
+    val accuracyM: Float? = null,
+    val finish: GeoPt? = null,
+    val pickingFinish: Boolean = false,
+    val course: Course? = null,
 ) {
     fun distanceTo(b: Beacon): Double? {
         val la = myLat

@@ -141,6 +141,70 @@ end $$;
 -- mais l'app (rôle anon) doit pouvoir les appeler : le mot de passe fait la sécurité.
 grant execute on all functions in schema public to anon, authenticated;
 
+-- ---------- Durcissement : balises lisibles par tous, modifiables seulement via l'admin ----------
+drop policy if exists "Admin peut modifier les balises" on public.beacons;
+revoke insert, update, delete, truncate on public.beacons from anon, authenticated;
+
+-- ---------- Chemins et obstacles (mode créateur) ----------------------
+-- kind = 'path' (chemin praticable) ou 'barrier' (obstacle : rivière, clôture...)
+-- points = [[lat, lon, altitude], ...] (altitude IGN facultative)
+create table if not exists public.trails (
+  id         bigint generated always as identity primary key,
+  name       text not null default '',
+  points     jsonb not null,
+  kind       text not null default 'path',
+  created_at timestamptz not null default now(),
+  constraint trails_points_is_array check (jsonb_typeof(points) = 'array')
+);
+alter table public.trails add column if not exists kind text not null default 'path';
+alter table public.trails drop constraint if exists trails_kind_check;
+alter table public.trails add constraint trails_kind_check check (kind in ('path', 'barrier'));
+alter table public.trails enable row level security;
+drop policy if exists "lecture chemins enregistrés" on public.trails;
+create policy "lecture chemins enregistrés" on public.trails for select to anon, authenticated using (true);
+revoke insert, update, delete, truncate on public.trails from anon, authenticated;
+
+drop function if exists public.admin_add_trail(text, text, jsonb);
+create or replace function public.admin_add_trail(p_password text, p_name text, p_points jsonb, p_kind text default 'path')
+returns bigint language plpgsql security definer set search_path = public as $$
+declare new_id bigint;
+begin
+  if not public._admin_ok(p_password) then raise exception 'Mot de passe incorrect'; end if;
+  if p_kind not in ('path', 'barrier') then raise exception 'Type invalide'; end if;
+  if p_points is null or jsonb_typeof(p_points) <> 'array'
+     or jsonb_array_length(p_points) < 2 or jsonb_array_length(p_points) > 20000 then
+    raise exception 'Chemin invalide';
+  end if;
+  insert into public.trails (name, points, kind) values (left(coalesce(p_name, ''), 60), p_points, p_kind)
+  returning id into new_id;
+  return new_id;
+end $$;
+
+create or replace function public.admin_delete_trail(p_password text, p_id bigint)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public._admin_ok(p_password) then raise exception 'Mot de passe incorrect'; end if;
+  delete from public.trails where id = p_id;
+end $$;
+
+create or replace function public.admin_stats(p_password text)
+returns json language plpgsql security definer set search_path = public as $$
+begin
+  if not public._admin_ok(p_password) then raise exception 'Mot de passe incorrect'; end if;
+  return json_build_object(
+    'beacons',         (select count(*) from public.beacons),
+    'trails',          (select count(*) from public.trails),
+    'active_now',      (select count(*) from public.runner_positions where updated_at > now() - interval '2 minutes'),
+    'launches',        (select count(*) from public.app_events where event = 'launch'),
+    'distinct_users',  (select count(distinct username) from public.app_events),
+    'validations',     (select count(*) from public.app_events where event = 'beacon_validated')
+  );
+end $$;
+
+grant execute on function public.admin_add_trail(text, text, jsonb, text) to anon, authenticated;
+grant execute on function public.admin_delete_trail(text, bigint) to anon, authenticated;
+grant execute on function public.admin_stats(text) to anon, authenticated;
+
 -- ---------- Mot de passe admin ---------------------------------------
 -- ⚠️ Remplace CHANGE_MOI avant d'exécuter. Pour le changer plus tard, relance seulement ce bloc.
 insert into public.admin_secret (id, password_hash)

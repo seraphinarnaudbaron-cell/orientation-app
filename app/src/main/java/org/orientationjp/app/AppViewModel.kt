@@ -205,6 +205,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 myLat = loc.latitude,
                 myLon = loc.longitude,
                 gpsStatus = "GPS actif",
+                accuracyM = if (loc.hasAccuracy()) loc.accuracy else null,
                 recenterTick = if (first) it.recenterTick + 1 else it.recenterTick,
             )
         }
@@ -212,7 +213,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
         // Mode créateur : on ajoute le point si la précision est correcte et qu'on a bougé d'au moins 2,5 m
         val st = _state.value
-        if (st.recording && !st.recordPaused && (!loc.hasAccuracy() || loc.accuracy <= 20f)) {
+        if (st.recording && !st.recordPaused && (!loc.hasAccuracy() || loc.accuracy <= 12f)) {
             val last = st.recorded.lastOrNull()
             if (last == null || Geo.distance(last.lat, last.lon, loc.latitude, loc.longitude) >= 2.5) {
                 _state.update { it.copy(recorded = it.recorded + GeoPt(loc.latitude, loc.longitude)) }
@@ -240,7 +241,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val list = withContext(Dispatchers.IO) { SupabaseApi.getBeacons() }
             _state.update { st ->
                 val still = st.target?.let { t -> list.firstOrNull { it.id == t.id } }
-                st.copy(beacons = list, online = true, lastError = "", target = still, route = if (still == null) null else st.route)
+                st.copy(
+                    beacons = list,
+                    online = true,
+                    lastError = "",
+                    target = still,
+                    route = if (still == null) null else st.route,
+                    course = st.course?.let { c -> if (c.order.all { o -> list.any { it.id == o.id } }) c else null },
+                )
             }
         } catch (e: CancellationException) {
             throw e
@@ -319,8 +327,69 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ------------------------------------------------------------------ parcours (plusieurs balises + arrivée)
+    fun startPickingFinish() {
+        _state.update { it.copy(pickingFinish = true) }
+        say("Touche la carte pour placer l'arrivée")
+    }
+
+    fun cancelPickingFinish() {
+        _state.update { it.copy(pickingFinish = false) }
+    }
+
+    fun setFinish(lat: Double, lon: Double) {
+        _state.update { it.copy(finish = GeoPt(lat, lon), pickingFinish = false, course = null) }
+        say("Arrivée placée")
+    }
+
+    fun clearCourse() {
+        _state.update { it.copy(course = null, finish = null, pickingFinish = false) }
+    }
+
+    fun planCourse(numbersText: String) {
+        val st = _state.value
+        val nums = Regex("\\d+").findAll(numbersText).map { it.value.toLong() }.toList().distinct()
+        if (nums.isEmpty()) {
+            say("Entre au moins un numéro de balise")
+            return
+        }
+        if (nums.size > CoursePlanner.MAX_BEACONS) {
+            say("Maximum " + CoursePlanner.MAX_BEACONS + " balises")
+            return
+        }
+        val missing = nums.filter { n -> st.beacons.none { it.number == n } }
+        if (missing.isNotEmpty()) {
+            say("Balise introuvable : " + missing.joinToString(", "))
+            return
+        }
+        val finish = st.finish
+        if (finish == null) {
+            say("Place d'abord l'arrivée sur la carte")
+            return
+        }
+        val la = st.myLat
+        val lo = st.myLon
+        if (la == null || lo == null) {
+            say("Position GPS indisponible : le départ est ta position")
+            return
+        }
+        val chosen = nums.map { n -> st.beacons.first { it.number == n } }
+        val g = graph
+        viewModelScope.launch {
+            try {
+                val c = withContext(Dispatchers.Default) { CoursePlanner.plan(g, GeoPt(la, lo), chosen, finish) }
+                _state.update { it.copy(course = c) }
+                say("Parcours : " + Geo.format(c.lengthM) + " · " + Geo.formatTime(c.timeS))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                say("Erreur de calcul : " + (e.message ?: e.javaClass.simpleName).take(80))
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ mode créateur de chemin
-    fun startRecording() {
+    fun startRecording(kind: String) {
         val st = _state.value
         if (!st.adminUnlocked) {
             say("Connecte-toi en admin d'abord")
@@ -329,8 +398,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val la = st.myLat
         val lo = st.myLon
         val first = if (la != null && lo != null) listOf(GeoPt(la, lo)) else emptyList()
-        _state.update { it.copy(recording = true, recordPaused = false, recorded = first, screen = Screen.Map) }
-        say("Mode créateur : marche le long du chemin")
+        _state.update { it.copy(recording = true, recordPaused = false, recorded = first, recordKind = kind, screen = Screen.Map) }
+        say(if (kind == "barrier") "Mode obstacle : marche le long de la rivière / clôture" else "Mode créateur : marche le long du chemin")
     }
 
     fun toggleRecordPause() {
@@ -345,7 +414,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun finishRecording(name: String) {
         val pts = _state.value.recorded
         if (pts.size < 5 || pathLength(pts) < 10.0) {
-            say("Chemin trop court : marche au moins 10 m")
+            say("Trop court : marche au moins 10 m")
             return
         }
         val pw = adminPassword
@@ -353,12 +422,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             say("Reconnecte-toi en admin pour enregistrer")
             return
         }
-        val n = name.trim().ifEmpty { "Chemin" }
+        val kind = _state.value.recordKind
+        val n = name.trim().ifEmpty { if (kind == "barrier") "Obstacle" else "Chemin" }
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { SupabaseApi.adminAddTrail(pw, n, pts) }
+                // Altitudes du terrain (IGN) : indispensables pour tenir compte du dénivelé
+                var toSend = pts
+                if (kind == "path") {
+                    val z = withContext(Dispatchers.IO) { ElevationApi.fetch(pts) }
+                    if (z != null && z.size == pts.size) {
+                        toSend = pts.mapIndexed { i, p -> GeoPt(p.lat, p.lon, z[i]) }
+                    } else {
+                        say("Altitude indisponible : enregistré en 2D (sans dénivelé)")
+                    }
+                }
+                withContext(Dispatchers.IO) { SupabaseApi.adminAddTrail(pw, n, toSend, kind) }
                 _state.update { it.copy(recording = false, recordPaused = false, recorded = emptyList()) }
-                say("Chemin enregistré (" + Geo.format(pathLength(pts)) + ")")
+                say((if (kind == "barrier") "Obstacle enregistré (" else "Chemin enregistré (") + Geo.format(pathLength(pts)) + ")")
                 refreshTrails()
                 refreshAdmin()
             } catch (e: CancellationException) {

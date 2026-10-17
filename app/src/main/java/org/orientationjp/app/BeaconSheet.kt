@@ -50,7 +50,7 @@ fun BeaconSheet(
         ) {
             Text(beacon.title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextDark, modifier = Modifier.fillMaxWidth())
             Text(
-                if (dist != null) "À " + Geo.format(dist) else "Position inconnue",
+                "n° " + beacon.number + " · " + (if (dist != null) "à " + Geo.format(dist) else "position inconnue"),
                 fontSize = 14.sp,
                 color = Muted,
                 modifier = Modifier.fillMaxWidth(),
@@ -101,7 +101,7 @@ fun BeaconListSheet(state: UiState, onPick: (Beacon) -> Unit, onDismiss: () -> U
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(state.beacons) { b ->
                         val d = state.distanceTo(b)
-                        var label = b.title
+                        var label = "n°" + b.number + "  " + b.title
                         if (d != null) label += "   " + Geo.format(d)
                         GhostButton(label, Modifier.fillMaxWidth()) { onPick(b) }
                     }

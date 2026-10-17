@@ -144,14 +144,20 @@ fun AdminScreen(state: UiState, vm: AppViewModel) {
                 }
 
                 AppCard {
-                    CardTitle("Chemins")
+                    CardTitle("Chemins et obstacles")
                     BodyText(
                         "Mode créateur : marche le long d'un chemin, l'app enregistre ton parcours. " +
                             "Quand deux chemins passent à moins de 5 m l'un de l'autre, ils sont reliés " +
                             "(nœud) : le coureur est guidé le long de tes chemins. " +
                             "Garde l'écran allumé et l'app au premier plan."
                     )
-                    PrimaryButton("Créer un chemin") { vm.startRecording() }
+                    PrimaryButton("Créer un chemin") { vm.startRecording("path") }
+                    BodyText(
+                        "Obstacles : rivière, clôture, falaise... Marche le long de l'obstacle pour le tracer. " +
+                            "Aucun chemin ne sera relié d'un côté à l'autre (sauf là où tu as enregistré un chemin qui le traverse, " +
+                            "par exemple un pont)."
+                    )
+                    SecondaryButton("Tracer un obstacle", Modifier.fillMaxWidth()) { vm.startRecording("barrier") }
                     if (state.trails.isEmpty()) BodyText("Aucun chemin enregistré.")
                     for (t in state.trails) {
                         Row(
@@ -160,7 +166,7 @@ fun AdminScreen(state: UiState, vm: AppViewModel) {
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                (if (t.name.isBlank()) "Chemin " + t.id else t.name) + " · " + Geo.format(t.length),
+                                (if (t.isBarrier) "Obstacle · " else "Chemin · ") + (if (t.name.isBlank()) "#" + t.id else t.name) + " · " + Geo.format(t.length),
                                 color = TextDark,
                                 fontSize = 14.sp,
                                 modifier = Modifier.weight(1f),

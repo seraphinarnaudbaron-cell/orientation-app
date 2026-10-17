@@ -84,7 +84,7 @@ object SupabaseApi {
     }
 
     fun getTrails(): List<Trail> {
-        val arr = select("trails", mapOf("select" to "id,name,points", "order" to "id.asc"))
+        val arr = select("trails", mapOf("select" to "id,name,points,kind", "order" to "id.asc"))
         val out = ArrayList<Trail>()
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
@@ -92,9 +92,11 @@ object SupabaseApi {
             val pts = ArrayList<GeoPt>(raw.length())
             for (k in 0 until raw.length()) {
                 val p = raw.getJSONArray(k)
-                pts.add(GeoPt(p.getDouble(0), p.getDouble(1)))
+                val ele = if (p.length() >= 3 && !p.isNull(2)) p.getDouble(2) else Double.NaN
+                pts.add(GeoPt(p.getDouble(0), p.getDouble(1), ele))
             }
-            out.add(Trail(o.getLong("id"), o.str("name"), pts))
+            val kind = o.str("kind").ifEmpty { "path" }
+            out.add(Trail(o.getLong("id"), o.str("name"), pts, kind))
         }
         return out
     }
@@ -152,14 +154,16 @@ object SupabaseApi {
         rpc("admin_delete_beacon", JSONObject().put("p_password", password).put("p_id", id))
     }
 
-    fun adminAddTrail(password: String, name: String, points: List<GeoPt>) {
+    fun adminAddTrail(password: String, name: String, points: List<GeoPt>, kind: String) {
         val arr = JSONArray()
         for (p in points) {
-            arr.put(JSONArray().put(Math.round(p.lat * 1e6) / 1e6).put(Math.round(p.lon * 1e6) / 1e6))
+            val item = JSONArray().put(Math.round(p.lat * 1e6) / 1e6).put(Math.round(p.lon * 1e6) / 1e6)
+            if (!p.ele.isNaN()) item.put(Math.round(p.ele * 10.0) / 10.0)
+            arr.put(item)
         }
         rpc(
             "admin_add_trail",
-            JSONObject().put("p_password", password).put("p_name", name).put("p_points", arr),
+            JSONObject().put("p_password", password).put("p_name", name).put("p_points", arr).put("p_kind", kind),
         )
     }
 

@@ -25,6 +25,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,6 +42,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
@@ -48,7 +50,9 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
 
 @Composable
@@ -62,7 +66,8 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
             setMultiTouchControls(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             minZoomLevel = 3.0
-            maxZoomLevel = 19.0
+            // les tuiles OSM s'arrêtent au zoom 19 : au-delà elles sont agrandies, pour viser une balise à quelques mètres
+            maxZoomLevel = 22.0
             controller.setZoom(vm.mapZoom)
             controller.setCenter(GeoPoint(vm.mapLat, vm.mapLon))
             addMapListener(object : MapListener {
@@ -98,6 +103,8 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
     var showList by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var showNameDialog by remember { mutableStateOf(false) }
+    var showCourse by remember { mutableStateOf(false) }
+    var courseText by rememberSaveable { mutableStateOf("") }
     var trailName by remember { mutableStateOf("") }
 
     // Pendant l'enregistrement d'un chemin : écran allumé (le GPS doit rester actif)
@@ -138,7 +145,14 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
     Box(Modifier.fillMaxSize()) {
         AndroidView(
             factory = { mv },
-            update = { view -> syncOverlays(view, state) { selected = it } },
+            update = { view ->
+                syncOverlays(
+                    view,
+                    state,
+                    onBeacon = { selected = it },
+                    onTap = { p -> if (state.pickingFinish) vm.setFinish(p.latitude, p.longitude) },
+                )
+            },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -201,6 +215,63 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
                 }
             }
 
+            if (state.pickingFinish) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFC62828), RoundedCornerShape(16.dp))
+                        .padding(start = 14.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Touche la carte pour placer l'arrivée",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f).padding(vertical = 12.dp),
+                    )
+                    Text(
+                        "Annuler",
+                        color = Color(0xFFFFCDD2),
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable { vm.cancelPickingFinish() }.padding(12.dp),
+                    )
+                }
+            }
+
+            val course = state.course
+            if (course != null) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF1565C0), RoundedCornerShape(16.dp))
+                        .padding(start = 14.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        courseSummary(course),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        modifier = Modifier.weight(1f).padding(vertical = 10.dp),
+                    )
+                    Text(
+                        "Détails",
+                        color = Color(0xFFBBDEFB),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        modifier = Modifier.clickable { showCourse = true }.padding(10.dp),
+                    )
+                    Text(
+                        "Effacer",
+                        color = Color(0xFFBBDEFB),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        modifier = Modifier.clickable { vm.clearCourse() }.padding(10.dp),
+                    )
+                }
+            }
+
             if (state.recording) {
                 Row(
                     Modifier
@@ -210,7 +281,7 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "● REC " + (if (state.recordPaused) "(pause) " else "") +
+                        "● REC " + (if (state.recordKind == "barrier") "obstacle " else "chemin ") + (if (state.recordPaused) "(pause) " else "") +
                             Geo.format(pathLength(state.recorded)) + " · " + state.recorded.size + " pts",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
@@ -249,7 +320,9 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
                 .navigationBarsPadding()
                 .padding(end = 14.dp, bottom = 72.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = Alignment.End,
         ) {
+            PillFab("Parcours") { showCourse = true }
             RoundFab("+") { mv.controller.zoomIn() }
             RoundFab("-") { mv.controller.zoomOut() }
             RoundFab("Moi") { vm.requestRecenter() }
@@ -275,15 +348,36 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
         }
     }
 
+    if (showCourse) {
+        CourseSheet(
+            state = state,
+            text = courseText,
+            onText = { courseText = it },
+            onPickFinish = {
+                showCourse = false
+                vm.startPickingFinish()
+            },
+            onPlan = {
+                vm.planCourse(courseText)
+                showCourse = false
+            },
+            onClear = {
+                vm.clearCourse()
+                showCourse = false
+            },
+            onDismiss = { showCourse = false },
+        )
+    }
+
     if (showNameDialog) {
         AlertDialog(
             onDismissRequest = { showNameDialog = false },
-            title = { Text("Nom du chemin") },
+            title = { Text(if (state.recordKind == "barrier") "Nom de l'obstacle" else "Nom du chemin") },
             text = {
                 RoundField(
                     value = trailName,
                     onValueChange = { trailName = it },
-                    hint = "ex. Sentier de la rivière",
+                    hint = if (state.recordKind == "barrier") "ex. Rivière" else "ex. Sentier du bois",
                     modifier = Modifier.fillMaxWidth(),
                 )
             },
@@ -339,7 +433,8 @@ private fun targetText(state: UiState, t: Beacon): String {
 
 private fun statusText(state: UiState): String {
     val parts = ArrayList<String>()
-    parts.add(state.gpsStatus)
+    val acc = state.accuracyM
+    parts.add(if (state.gpsStatus == "GPS actif" && acc != null) "GPS ±" + Math.round(acc) + " m" else state.gpsStatus)
     if (state.privateMode) {
         parts.add("mode privé")
     } else if (state.online == false) {
@@ -354,9 +449,21 @@ private fun statusText(state: UiState): String {
     return parts.joinToString(" · ")
 }
 
-private fun syncOverlays(mv: MapView, state: UiState, onBeacon: (Beacon) -> Unit) {
+private fun syncOverlays(mv: MapView, state: UiState, onBeacon: (Beacon) -> Unit, onTap: (GeoPoint) -> Unit) {
     val ctx = mv.context
     mv.overlays.clear()
+
+    // Un toucher sur la carte (hors marqueurs) : sert à placer l'arrivée d'un parcours
+    mv.overlays.add(
+        MapEventsOverlay(object : MapEventsReceiver {
+            override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
+                if (p != null) onTap(p)
+                return false
+            }
+
+            override fun longPressHelper(p: GeoPoint?): Boolean = false
+        })
+    )
 
     val la = state.myLat
     val lo = state.myLon
@@ -365,7 +472,11 @@ private fun syncOverlays(mv: MapView, state: UiState, onBeacon: (Beacon) -> Unit
     // Réseau de chemins : visible seulement en mode admin (pour voir ce qui est déjà couvert)
     if (state.adminUnlocked) {
         for (t in state.trails) {
-            mv.overlays.add(solidLine(t.points, "#992D6A4F", 6f))
+            if (t.isBarrier) {
+                mv.overlays.add(solidLine(t.points, "#BB6A1B9A", 8f))
+            } else {
+                mv.overlays.add(solidLine(t.points, "#992D6A4F", 6f))
+            }
         }
     }
 
@@ -374,16 +485,51 @@ private fun syncOverlays(mv: MapView, state: UiState, onBeacon: (Beacon) -> Unit
         mv.overlays.add(solidLine(state.recorded, "#E53935", 9f))
     }
 
+    // Parcours multi-balises : plein sur les chemins, pointillé pour les raccords
+    val course = state.course
+    if (course != null) {
+        for (seg in course.segments) {
+            if (seg.dashed) {
+                mv.overlays.add(dashedLine(seg.points.first(), seg.points.last(), "#1565C0"))
+            } else {
+                mv.overlays.add(solidLine(seg.points, "#1565C0", 10f))
+            }
+        }
+    }
+
     // Itinéraire vers la balise visée
     if (target != null && la != null && lo != null) {
         val route = state.route
         if (route != null && route.points.isNotEmpty()) {
-            mv.overlays.add(dashedLine(route.start, route.points.first()))
+            mv.overlays.add(dashedLine(route.start, route.points.first(), "#F77F00"))
             mv.overlays.add(solidLine(route.points, "#F77F00", 10f))
-            mv.overlays.add(dashedLine(route.points.last(), route.end))
+            mv.overlays.add(dashedLine(route.points.last(), route.end, "#F77F00"))
         } else {
-            mv.overlays.add(dashedLine(GeoPt(la, lo), GeoPt(target.lat, target.lon)))
+            mv.overlays.add(dashedLine(GeoPt(la, lo), GeoPt(target.lat, target.lon), "#F77F00"))
         }
+    }
+
+    // Cercle de précision du GPS : le rayon réel de l'incertitude sur ta position
+    val acc = state.accuracyM
+    if (la != null && lo != null && acc != null && acc > 0f) {
+        val circle = Polygon()
+        circle.setPoints(Polygon.pointsAsCircle(GeoPoint(la, lo), acc.toDouble()))
+        circle.fillPaint.color = android.graphics.Color.argb(40, 33, 150, 243)
+        circle.outlinePaint.color = android.graphics.Color.argb(130, 33, 150, 243)
+        circle.outlinePaint.strokeWidth = 2f
+        mv.overlays.add(circle)
+    }
+
+    // Arrivée du parcours (petit point rouge)
+    val finish = state.finish
+    if (finish != null) {
+        val f = Marker(mv)
+        f.position = GeoPoint(finish.lat, finish.lon)
+        f.icon = ContextCompat.getDrawable(ctx, R.drawable.finish)
+        f.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+        f.title = "Arrivée"
+        f.setOnMarkerClickListener { _, _ -> true }
+        mv.overlays.add(f)
     }
 
     for (r in state.runners) {
@@ -430,10 +576,10 @@ private fun solidLine(points: List<GeoPt>, color: String, width: Float): Polylin
     return line
 }
 
-private fun dashedLine(a: GeoPt, b: GeoPt): Polyline {
+private fun dashedLine(a: GeoPt, b: GeoPt, color: String): Polyline {
     val line = Polyline()
     line.setPoints(listOf(GeoPoint(a.lat, a.lon), GeoPoint(b.lat, b.lon)))
-    line.outlinePaint.color = android.graphics.Color.parseColor("#F77F00")
+    line.outlinePaint.color = android.graphics.Color.parseColor(color)
     line.outlinePaint.strokeWidth = 7f
     line.outlinePaint.pathEffect = DashPathEffect(floatArrayOf(24f, 16f), 0f)
     return line

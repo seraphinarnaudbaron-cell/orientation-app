@@ -232,3 +232,19 @@ fun PatternView(pattern: String, cell: androidx.compose.ui.unit.Dp = 64.dp) {
         }
     }
 }
+
+@Composable
+fun PillFab(text: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .height(48.dp)
+            .shadow(4.dp, RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.White)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, color = Green, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+    }
+}

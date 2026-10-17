@@ -33,4 +33,9 @@ object Geo {
 
     fun format(m: Double): String =
         if (m < 1000) "${Math.round(m)} m" else String.format(java.util.Locale.FRANCE, "%.1f km", m / 1000.0)
+
+    fun formatTime(seconds: Double): String {
+        val min = Math.round(seconds / 60.0).toInt()
+        return if (min < 60) "$min min" else (min / 60).toString() + " h " + String.format(java.util.Locale.FRANCE, "%02d", min % 60)
+    }
 }
