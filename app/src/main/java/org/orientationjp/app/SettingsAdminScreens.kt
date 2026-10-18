@@ -44,6 +44,7 @@ fun SettingsScreen(state: UiState, vm: AppViewModel) {
             .fillMaxSize()
             .background(Bg)
             .systemBarsPadding()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -58,6 +59,12 @@ fun SettingsScreen(state: UiState, vm: AppViewModel) {
                 onToggle = { vm.setPrivate(it) },
             )
         }
+        AppCard {
+            CardTitle("Fond de carte")
+            ChoiceRow(TileSources.LABELS, TileSources.KEYS.indexOf(state.basemap).coerceAtLeast(0)) { vm.setBasemap(TileSources.KEYS[it]) }
+            BodyText("La photo aérienne (IGN) est idéale pour viser une balise précisément.")
+        }
+        OfflineMapCard(state, vm.mapLat, vm.mapLon)
         AppCard {
             SecondaryButton("Panel admin", Modifier.fillMaxWidth()) { vm.go(Screen.Admin) }
             GhostButton("Changer de nom", Modifier.fillMaxWidth()) { vm.logout() }
@@ -78,6 +85,9 @@ fun AdminScreen(state: UiState, vm: AppViewModel) {
     var name by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
     val cells = remember { newCells() }
+    var numText by remember { mutableStateOf("") }
+    var posChoice by remember { mutableStateOf(0) }
+    var editing by remember { mutableStateOf<Beacon?>(null) }
 
     Column(
         Modifier
@@ -127,18 +137,26 @@ fun AdminScreen(state: UiState, vm: AppViewModel) {
 
                 AppCard {
                     CardTitle("Nouvelle balise")
+                    BodyText("Où placer la balise ?")
+                    ChoiceRow(listOf("Centre de la carte", "Ma position GPS"), posChoice) { posChoice = it }
                     BodyText(
-                        "La balise est placée au centre de la carte tel que tu l'as laissé. " +
-                            "Position actuelle : " + String.format(java.util.Locale.US, "%.5f, %.5f", vm.mapLat, vm.mapLon)
+                        if (posChoice == 0) {
+                            "Centre de la carte tel que tu l'as laissé : " +
+                                String.format(java.util.Locale.US, "%.5f, %.5f", vm.mapLat, vm.mapLon)
+                        } else {
+                            "Là où tu te trouves maintenant (mets-toi sur la balise)."
+                        }
                     )
+                    RoundField(numText, { numText = it.filter { ch -> ch.isDigit() }.take(4) }, "Numéro (vide = automatique)", Modifier.fillMaxWidth(), keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
                     RoundField(name, { name = it }, "Nom (ex. Balise 4)", Modifier.fillMaxWidth())
                     RoundField(desc, { desc = it }, "Description", Modifier.fillMaxWidth())
                     BodyText("Motif de poinçons :")
                     PunchGrid(cells = cells, cell = 48.dp)
                     PrimaryButton("Ajouter ici") {
-                        vm.addBeacon(name, desc, patternOf(cells))
+                        vm.addBeacon(name, desc, patternOf(cells), numText, posChoice)
                         name = ""
                         desc = ""
+                        numText = ""
                         for (i in 0 until 9) cells[i] = false
                     }
                 }
@@ -186,11 +204,13 @@ fun AdminScreen(state: UiState, vm: AppViewModel) {
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                b.title + "  [" + b.pattern + "]",
+                                "n°" + b.number + "  " + b.title,
                                 color = TextDark,
                                 fontSize = 14.sp,
+                                maxLines = 2,
                                 modifier = Modifier.weight(1f),
                             )
+                            GhostButton("Modifier") { editing = b }
                             GhostButton("Suppr.") { vm.deleteBeacon(b) }
                         }
                     }
@@ -198,5 +218,13 @@ fun AdminScreen(state: UiState, vm: AppViewModel) {
                 Spacer(Modifier.height(8.dp))
             }
         }
+    }
+
+    editing?.let { b ->
+        BeaconEditSheet(
+            beacon = b,
+            onSave = { n, d, p, num, mv -> vm.updateBeacon(b, n, d, p, num, mv) },
+            onDismiss = { editing = null },
+        )
     }
 }

@@ -18,6 +18,13 @@ Kotlin natif, Jetpack Compose, carte OpenStreetMap (osmdroid), backend Supabase.
 - **Dénivelé réel** : les altitudes viennent de l'IGN (RGE ALTI) ; l'itinéraire est le plus *rapide* (formule de Tobler), pas le plus court en 2D ; deux chemins proches mais à des niveaux différents (falaise) ne sont pas reliés
 - **Mode créateur de chemin** : l'admin marche, le GPS enregistre sa trace. Les traces qui passent à moins de 5 m l'une de l'autre sont reliées (nœuds) ; l'app calcule le plus court chemin (Dijkstra) sur ce réseau et le trace au coureur.
 
+## Robustesse et hors ligne
+
+- **Enregistrement protégé** : la trace en cours est sauvegardée sur le téléphone à chaque point ; si l'app plante ou si le téléphone s'éteint, elle est reprise (en pause) au lancement suivant. Un service au premier plan (notification) garde le GPS actif écran éteint.
+- **Édition des balises** (panel admin) : numéro, nom, description, motif, position (centre de la carte ou position GPS).
+- **Mode hors ligne** : balises et chemins sont gardés en mémoire ; le calcul d'itinéraire et de parcours fonctionne sans réseau ; les positions repartent automatiquement au retour du réseau.
+- **Fonds de carte** : Plan OSM, Plan IGN, Photo aérienne IGN (Menu). Les fonds IGN peuvent être téléchargés pour la zone (Menu > Carte hors ligne). OpenStreetMap interdit le téléchargement en masse.
+
 ## Mise en route
 
 ### 1. Base de données (Supabase)

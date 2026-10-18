@@ -46,7 +46,6 @@ import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
@@ -62,7 +61,7 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
 
     val mv = remember {
         MapView(context).apply {
-            setTileSource(TileSourceFactory.MAPNIK)
+            setTileSource(TileSources.forKey(state.basemap))
             setMultiTouchControls(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             minZoomLevel = 3.0
@@ -99,6 +98,12 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
         }
     }
 
+    var appliedBase by remember { mutableStateOf(state.basemap) }
+    if (appliedBase != state.basemap) {
+        appliedBase = state.basemap
+        mv.setTileSource(TileSources.forKey(state.basemap))
+    }
+
     var selected by remember { mutableStateOf<Beacon?>(null) }
     var showList by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
@@ -106,13 +111,6 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
     var showCourse by remember { mutableStateOf(false) }
     var courseText by rememberSaveable { mutableStateOf("") }
     var trailName by remember { mutableStateOf("") }
-
-    // Pendant l'enregistrement d'un chemin : écran allumé (le GPS doit rester actif)
-    val view = LocalView.current
-    DisposableEffect(state.recording) {
-        view.keepScreenOn = state.recording
-        onDispose { view.keepScreenOn = false }
-    }
 
     // Recentrage sur ma position quand on le demande (pas au simple retour sur l'écran)
     var seenTick by remember { mutableStateOf(state.recenterTick) }
@@ -438,7 +436,7 @@ private fun statusText(state: UiState): String {
     if (state.privateMode) {
         parts.add("mode privé")
     } else if (state.online == false) {
-        parts.add("hors ligne" + (if (state.lastError.isNotEmpty()) " (" + state.lastError + ")" else ""))
+        parts.add("hors ligne" + (if (state.beacons.isNotEmpty()) " · données en mémoire" else "") + (if (state.lastError.isNotEmpty()) " (" + state.lastError + ")" else ""))
     } else if (state.online == true) {
         val n = state.runners.size
         parts.add(n.toString() + " autre" + (if (n > 1) "s" else "") + " en ligne")

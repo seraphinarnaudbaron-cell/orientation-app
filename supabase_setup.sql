@@ -205,6 +205,50 @@ grant execute on function public.admin_add_trail(text, text, jsonb, text) to ano
 grant execute on function public.admin_delete_trail(text, bigint) to anon, authenticated;
 grant execute on function public.admin_stats(text) to anon, authenticated;
 
+-- ---------- Numéros de balises et édition ---------------------------------
+alter table public.beacons add column if not exists number integer;
+update public.beacons b set number = x.rn
+from (select id, row_number() over (order by id)::int as rn from public.beacons) x
+where b.id = x.id and b.number is null;
+create unique index if not exists beacons_number_key on public.beacons (number);
+
+drop function if exists public.admin_add_beacon(text, text, double precision, double precision, text, text);
+create or replace function public.admin_add_beacon(
+  p_password text, p_name text, p_lat double precision, p_lon double precision,
+  p_pattern text, p_description text, p_number integer default null)
+returns bigint language plpgsql security definer set search_path = public as $$
+declare new_id bigint; num integer;
+begin
+  if not public._admin_ok(p_password) then raise exception 'Mot de passe incorrect'; end if;
+  if p_pattern !~ '^[01]{9}$' then raise exception 'Motif invalide'; end if;
+  num := coalesce(p_number, (select coalesce(max(number), 0) + 1 from public.beacons));
+  if exists (select 1 from public.beacons where number = num) then raise exception 'Numéro % déjà utilisé', num; end if;
+  insert into public.beacons (name, latitude, longitude, pattern, description, number)
+  values (coalesce(p_name, ''), p_lat, p_lon, p_pattern, coalesce(p_description, ''), num)
+  returning id into new_id;
+  return new_id;
+end $$;
+
+create or replace function public.admin_update_beacon(
+  p_password text, p_id bigint, p_name text, p_lat double precision, p_lon double precision,
+  p_pattern text, p_description text, p_number integer)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public._admin_ok(p_password) then raise exception 'Mot de passe incorrect'; end if;
+  if p_pattern !~ '^[01]{9}$' then raise exception 'Motif invalide'; end if;
+  if exists (select 1 from public.beacons where number = p_number and id <> p_id) then
+    raise exception 'Numéro % déjà utilisé', p_number;
+  end if;
+  update public.beacons
+     set name = coalesce(p_name, ''), latitude = p_lat, longitude = p_lon,
+         pattern = p_pattern, description = coalesce(p_description, ''), number = p_number
+   where id = p_id;
+  if not found then raise exception 'Balise introuvable'; end if;
+end $$;
+
+grant execute on function public.admin_add_beacon(text, text, double precision, double precision, text, text, integer) to anon, authenticated;
+grant execute on function public.admin_update_beacon(text, bigint, text, double precision, double precision, text, text, integer) to anon, authenticated;
+
 -- ---------- Mot de passe admin ---------------------------------------
 -- ⚠️ Remplace CHANGE_MOI avant d'exécuter. Pour le changer plus tard, relance seulement ce bloc.
 insert into public.admin_secret (id, password_hash)

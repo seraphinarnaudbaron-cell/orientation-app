@@ -64,27 +64,36 @@ object SupabaseApi {
     private fun JSONObject.str(key: String): String = if (isNull(key)) "" else getString(key)
 
     // ------------------------------------------------------------------ lecture
-    fun getBeacons(): List<Beacon> {
-        val arr = select("beacons", mapOf("select" to "*", "order" to "id.asc"))
+    /** JSON brut (gardé en cache pour le mode hors ligne). */
+    fun fetchBeaconsJson(): String =
+        select("beacons", mapOf("select" to "*", "order" to "id.asc")).toString()
+
+    fun parseBeacons(json: String): List<Beacon> {
+        val arr = JSONArray(json)
         val out = ArrayList<Beacon>()
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
+            val id = o.getLong("id")
             out.add(
                 Beacon(
-                    id = o.getLong("id"),
+                    id = id,
                     name = o.str("name"),
                     lat = o.getDouble("latitude"),
                     lon = o.getDouble("longitude"),
                     pattern = o.str("pattern"),
                     description = o.str("description"),
+                    number = if (o.isNull("number")) id else o.getLong("number"),
                 )
             )
         }
         return out
     }
 
-    fun getTrails(): List<Trail> {
-        val arr = select("trails", mapOf("select" to "id,name,points,kind", "order" to "id.asc"))
+    fun fetchTrailsJson(): String =
+        select("trails", mapOf("select" to "id,name,points,kind", "order" to "id.asc")).toString()
+
+    fun parseTrails(json: String): List<Trail> {
+        val arr = JSONArray(json)
         val out = ArrayList<Trail>()
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
@@ -137,16 +146,30 @@ object SupabaseApi {
     fun adminCheck(password: String): Boolean =
         rpc("admin_check", JSONObject().put("p_password", password)).trim() == "true"
 
-    fun adminAddBeacon(password: String, name: String, lat: Double, lon: Double, pattern: String, description: String) {
+    fun adminAddBeacon(password: String, name: String, lat: Double, lon: Double, pattern: String, description: String, number: Long?) {
+        val body = JSONObject()
+            .put("p_password", password)
+            .put("p_name", name)
+            .put("p_lat", lat)
+            .put("p_lon", lon)
+            .put("p_pattern", pattern)
+            .put("p_description", description)
+        if (number != null) body.put("p_number", number)
+        rpc("admin_add_beacon", body)
+    }
+
+    fun adminUpdateBeacon(password: String, id: Long, name: String, lat: Double, lon: Double, pattern: String, description: String, number: Long) {
         rpc(
-            "admin_add_beacon",
+            "admin_update_beacon",
             JSONObject()
                 .put("p_password", password)
+                .put("p_id", id)
                 .put("p_name", name)
                 .put("p_lat", lat)
                 .put("p_lon", lon)
                 .put("p_pattern", pattern)
-                .put("p_description", description),
+                .put("p_description", description)
+                .put("p_number", number),
         )
     }
 

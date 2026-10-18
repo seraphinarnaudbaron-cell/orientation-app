@@ -2,6 +2,7 @@ package org.orientationjp.app
 
 import android.Manifest
 import android.app.Application
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
 import androidx.core.content.ContextCompat
@@ -24,6 +25,8 @@ import kotlinx.coroutines.withContext
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = Prefs(app)
+    private val cache = DataCache(app)
+    private val recStore = RecordingStore(app)
 
     private val _state = MutableStateFlow(
         UiState(
@@ -31,6 +34,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             loggedIn = prefs.name.isNotBlank(),
             username = prefs.name,
             privateMode = prefs.privateMode,
+            basemap = prefs.basemap,
         )
     )
     private val tracker = LocationTracker(
@@ -61,7 +65,56 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var lastRouteLon = Double.NaN
 
     init {
+        // trace en cours sauvegardée (plantage, téléphone éteint...) : on la reprend, en pause
+        val saved = recStore.load()
+        if (saved != null) {
+            _state.update { it.copy(recording = true, recordPaused = true, recorded = saved.second, recordKind = saved.first) }
+            startRecordingService()
+            say("Enregistrement repris : " + saved.second.size + " points (en pause). « Reprendre » pour continuer, « Fin » pour enregistrer.")
+        }
+        // balises et chemins en mémoire : l'app fonctionne même sans réseau
+        viewModelScope.launch(Dispatchers.IO) { loadCache() }
         if (_state.value.loggedIn) startSession()
+    }
+
+    private fun loadCache() {
+        try {
+            cache.beaconsJson()?.let { json ->
+                val list = SupabaseApi.parseBeacons(json)
+                _state.update { st -> if (st.beacons.isEmpty()) st.copy(beacons = list) else st }
+            }
+        } catch (e: Exception) {
+        }
+        try {
+            cache.trailsJson()?.let { json ->
+                val list = SupabaseApi.parseTrails(json)
+                if (_state.value.trails.isEmpty() && graph == null) {
+                    graph = TrailGraph(list)
+                    _state.update { st -> if (st.trails.isEmpty()) st.copy(trails = list) else st }
+                    recomputeRoute(true)
+                }
+            }
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun startRecordingService() {
+        try {
+            ContextCompat.startForegroundService(getApplication(), Intent(getApplication(), RecordingService::class.java))
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun stopRecordingService() {
+        try {
+            getApplication<Application>().stopService(Intent(getApplication(), RecordingService::class.java))
+        } catch (e: Exception) {
+        }
+    }
+
+    fun setBasemap(key: String) {
+        prefs.basemap = key
+        _state.update { it.copy(basemap = key) }
     }
 
     // ------------------------------------------------------------------ utilitaires
@@ -124,6 +177,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun logout() {
+        recStore.clear()
+        stopRecordingService()
         val n = _state.value.username
         if (n.isNotEmpty()) {
             viewModelScope.launch(Dispatchers.IO) {
@@ -216,7 +271,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (st.recording && !st.recordPaused && (!loc.hasAccuracy() || loc.accuracy <= 12f)) {
             val last = st.recorded.lastOrNull()
             if (last == null || Geo.distance(last.lat, last.lon, loc.latitude, loc.longitude) >= 2.5) {
-                _state.update { it.copy(recorded = it.recorded + GeoPt(loc.latitude, loc.longitude)) }
+                val np = GeoPt(loc.latitude, loc.longitude)
+                _state.update { it.copy(recorded = it.recorded + np) }
+                recStore.append(np)
             }
         }
         recomputeRoute(false)
@@ -238,7 +295,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------------ réseau
     private suspend fun refreshBeacons() {
         try {
-            val list = withContext(Dispatchers.IO) { SupabaseApi.getBeacons() }
+            val list = withContext(Dispatchers.IO) {
+                val json = SupabaseApi.fetchBeaconsJson()
+                cache.saveBeacons(json)
+                SupabaseApi.parseBeacons(json)
+            }
             _state.update { st ->
                 val still = st.target?.let { t -> list.firstOrNull { it.id == t.id } }
                 st.copy(
@@ -292,7 +353,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------------ chemins et itinéraire
     private suspend fun refreshTrails() {
         try {
-            val list = withContext(Dispatchers.IO) { SupabaseApi.getTrails() }
+            val list = withContext(Dispatchers.IO) {
+                val json = SupabaseApi.fetchTrailsJson()
+                cache.saveTrails(json)
+                SupabaseApi.parseTrails(json)
+            }
             if (list != _state.value.trails) {
                 val g = withContext(Dispatchers.Default) { TrailGraph(list) }
                 graph = g
@@ -399,6 +464,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val lo = st.myLon
         val first = if (la != null && lo != null) listOf(GeoPt(la, lo)) else emptyList()
         _state.update { it.copy(recording = true, recordPaused = false, recorded = first, recordKind = kind, screen = Screen.Map) }
+        recStore.begin(kind)
+        for (p in first) recStore.append(p)
+        startRecordingService()
         say(if (kind == "barrier") "Mode obstacle : marche le long de la rivière / clôture" else "Mode créateur : marche le long du chemin")
     }
 
@@ -407,6 +475,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancelRecording() {
+        recStore.clear()
+        stopRecordingService()
         _state.update { it.copy(recording = false, recordPaused = false, recorded = emptyList()) }
         say("Enregistrement annulé")
     }
@@ -437,6 +507,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 withContext(Dispatchers.IO) { SupabaseApi.adminAddTrail(pw, n, toSend, kind) }
+                recStore.clear()
+                stopRecordingService()
                 _state.update { it.copy(recording = false, recordPaused = false, recorded = emptyList()) }
                 say((if (kind == "barrier") "Obstacle enregistré (" else "Chemin enregistré (") + Geo.format(pathLength(pts)) + ")")
                 refreshTrails()
@@ -511,18 +583,81 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun addBeacon(name: String, description: String, pattern: String) {
+    /** Position choisie par l'admin : 0 = centre de la carte, 1 = ma position GPS. Null si indisponible. */
+    private fun pickPosition(source: Int): Pair<Double, Double>? {
+        if (source == 1) {
+            val st = _state.value
+            val la = st.myLat
+            val lo = st.myLon
+            if (la == null || lo == null) {
+                say("Position GPS indisponible")
+                return null
+            }
+            return Pair(la, lo)
+        }
+        return Pair(mapLat, mapLon)
+    }
+
+    private fun parseNumber(text: String): Long? {
+        val n = text.trim().toLongOrNull()
+        return if (n != null && n in 1..9999) n else null
+    }
+
+    fun addBeacon(name: String, description: String, pattern: String, numberText: String, positionSource: Int) {
         if (!pattern.contains('1')) {
             say("Coche au moins un poinçon")
             return
         }
+        var number: Long? = null
+        if (numberText.isNotBlank()) {
+            number = parseNumber(numberText)
+            if (number == null) {
+                say("Numéro invalide (1 à 9999)")
+                return
+            }
+        }
+        val pos = pickPosition(positionSource) ?: return
         val pw = adminPassword
-        val lat = mapLat
-        val lon = mapLon
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { SupabaseApi.adminAddBeacon(pw, name.trim(), lat, lon, pattern, description.trim()) }
+                withContext(Dispatchers.IO) {
+                    SupabaseApi.adminAddBeacon(pw, name.trim(), pos.first, pos.second, pattern, description.trim(), number)
+                }
                 say("Balise ajoutée")
+                refreshAdmin()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onNetworkError(e, force = true)
+            }
+        }
+    }
+
+    /** move : 0 = garder la position, 1 = centre de la carte, 2 = ma position GPS. */
+    fun updateBeacon(b: Beacon, name: String, description: String, pattern: String, numberText: String, move: Int) {
+        if (!pattern.contains('1')) {
+            say("Coche au moins un poinçon")
+            return
+        }
+        val number = parseNumber(numberText)
+        if (number == null) {
+            say("Numéro invalide (1 à 9999)")
+            return
+        }
+        var lat = b.lat
+        var lon = b.lon
+        if (move != 0) {
+            val pos = pickPosition(if (move == 2) 1 else 0) ?: return
+            lat = pos.first
+            lon = pos.second
+        }
+        val pw = adminPassword
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    SupabaseApi.adminUpdateBeacon(pw, b.id, name.trim(), lat, lon, pattern, description.trim(), number)
+                }
+                say("Balise modifiée")
                 refreshAdmin()
             } catch (e: CancellationException) {
                 throw e

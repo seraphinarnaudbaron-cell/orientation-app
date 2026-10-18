@@ -16,4 +16,10 @@ class Prefs(context: Context) {
         set(value) {
             sp.edit().putBoolean("private", value).apply()
         }
+
+    var basemap: String
+        get() = sp.getString("basemap", "osm") ?: "osm"
+        set(value) {
+            sp.edit().putString("basemap", value).apply()
+        }
 }

@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardActions
@@ -110,6 +111,7 @@ fun RoundField(
     modifier: Modifier = Modifier,
     password: Boolean = false,
     imeAction: ImeAction = ImeAction.Done,
+    keyboardType: KeyboardType = KeyboardType.Text,
     onAction: () -> Unit = {},
 ) {
     OutlinedTextField(
@@ -119,7 +121,7 @@ fun RoundField(
         singleLine = true,
         shape = RoundedCornerShape(14.dp),
         visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(imeAction = imeAction),
+        keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = keyboardType),
         keyboardActions = KeyboardActions(onDone = { onAction() }, onSearch = { onAction() }, onGo = { onAction() }),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = Field,
@@ -246,5 +248,38 @@ fun PillFab(text: String, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text(text, color = Green, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+    }
+}
+
+/** Cases à cocher initialisées depuis un motif de 9 caractères. */
+fun cellsFrom(pattern: String): SnapshotStateList<Boolean> {
+    val l = androidx.compose.runtime.mutableStateListOf<Boolean>()
+    for (i in 0 until 9) l.add(i < pattern.length && pattern[i] == '1')
+    return l
+}
+
+/** Choix unique entre plusieurs options (boutons côte à côte). */
+@Composable
+fun ChoiceRow(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (i in options.indices) {
+            val on = i == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (on) Green2 else Field)
+                    .clickable { onSelect(i) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    options[i],
+                    color = if (on) Color.White else Muted,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                )
+            }
+        }
     }
 }

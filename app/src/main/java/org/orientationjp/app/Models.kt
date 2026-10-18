@@ -7,10 +7,10 @@ data class Beacon(
     val lon: Double,
     val pattern: String,
     val description: String,
+    /** Numéro choisi par l'admin (affiché aux coureurs et utilisé pour composer un parcours). */
+    val number: Long = id,
 ) {
     val title: String get() = if (name.isBlank()) "Balise $id" else name
-    /** Numéro affiché et utilisé pour composer un parcours. */
-    val number: Long get() = id
 }
 
 data class GeoPt(val lat: Double, val lon: Double, val ele: Double = Double.NaN)
@@ -94,6 +94,7 @@ data class UiState(
     val finish: GeoPt? = null,
     val pickingFinish: Boolean = false,
     val course: Course? = null,
+    val basemap: String = "osm",
 ) {
     fun distanceTo(b: Beacon): Double? {
         val la = myLat

@@ -2,6 +2,7 @@ package org.orientationjp.app
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -30,8 +31,11 @@ class MainActivity : ComponentActivity() {
         // osmdroid : User-Agent obligatoire (politique OSM) et cache dans le dossier de l'app
         val conf = Configuration.getInstance()
         conf.userAgentValue = Config.USER_AGENT
-        conf.osmdroidBasePath = File(cacheDir, "osmdroid")
-        conf.osmdroidTileCache = File(cacheDir, "osmdroid/tiles")
+        // dossier persistant (pas le cache système, qui peut être vidé) : les tuiles restent pour le hors ligne
+        conf.osmdroidBasePath = File(filesDir, "osmdroid")
+        conf.osmdroidTileCache = File(filesDir, "osmdroid/tiles")
+        // les tuiles déjà vues restent utilisables 30 jours (au lieu de quelques jours)
+        conf.expirationExtendedDuration = 30L * 24L * 3600L * 1000L
 
         enableEdgeToEdge()
         setContent {
@@ -51,6 +55,16 @@ fun AppRoot(vm: AppViewModel) {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
         vm.onPermissionResult(result.values.any { it })
+    }
+
+    val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(state.recording) {
+        // Android 13+ : permission pour afficher la notification du service d'enregistrement
+        if (state.recording && Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     LaunchedEffect(Unit) {
