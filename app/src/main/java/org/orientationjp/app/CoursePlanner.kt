@@ -135,9 +135,9 @@ object CoursePlanner {
                 val pb = graph.nodePt(nb)
                 val c1 = Geo.distance(pts[a].lat, pts[a].lon, pa.lat, pa.lon)
                 val c2 = Geo.distance(pb.lat, pb.lon, pts[b].lat, pts[b].lon)
-                if (c1 > 1.0) segments.add(CourseSeg(listOf(pts[a], pa), true))
-                segments.add(CourseSeg(path.map { graph.nodePt(it) }, false))
-                if (c2 > 1.0) segments.add(CourseSeg(listOf(pb, pts[b]), true))
+                if (c1 > 1.0) segments.add(CourseSeg(listOf(pts[a], pa), true, k - 1))
+                segments.add(CourseSeg(path.map { graph.nodePt(it) }, false, k - 1))
+                if (c2 > 1.0) segments.add(CourseSeg(listOf(pb, pts[b]), true, k - 1))
                 val len = m.length + c1 + c2
                 val time = trees[a]!!.cost[nb] + (c1 + c2) / flat
                 legs.add(CourseLeg(label(a), label(b), len, time, true))
@@ -148,7 +148,7 @@ object CoursePlanner {
             } else {
                 val d = straight(a, b)
                 val time = d / flat * OFF_TRAIL_PENALTY
-                segments.add(CourseSeg(listOf(pts[a], pts[b]), true))
+                segments.add(CourseSeg(listOf(pts[a], pts[b]), true, k - 1))
                 legs.add(CourseLeg(label(a), label(b), d, time, false))
                 totalLen += d
                 totalTime += time

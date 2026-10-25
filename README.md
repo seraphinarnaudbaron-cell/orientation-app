@@ -14,6 +14,7 @@ Kotlin natif, Jetpack Compose, carte OpenStreetMap (osmdroid), backend Supabase.
 - Recherche et liste des balises ; zoom jusqu'au niveau 22 et cercle de précision du GPS
 - **Parcours** : tu donnes les numéros des balises, tu poses l'arrivée sur la carte (point rouge), l'app trouve l'ordre le plus rapide (calcul exact jusqu'à 15 balises) en suivant les chemins
 - Panel admin : statistiques, ajout de balise au centre de la carte, suppression
+- **Suivi dynamique du parcours** : le tracé restant est bleu, le parcouru gris (comme un GPS) ; les balises atteintes (à moins de 25 m) passent en vert ; si tu t'écartes de plus de 30 m (ou 2,5 fois la précision GPS) pendant 3 positions, le parcours est recalculé depuis ta position ; une balise atteinte hors ordre déclenche aussi un recalcul
 - **Obstacles** : l'admin trace une rivière, une clôture... aucun chemin n'est relié à travers (sauf un chemin enregistré qui la traverse, ex. un pont)
 - **Dénivelé réel** : les altitudes viennent de l'IGN (RGE ALTI) ; l'itinéraire est le plus *rapide* (formule de Tobler), pas le plus court en 2D ; deux chemins proches mais à des niveaux différents (falaise) ne sont pas reliés
 - **Mode créateur de chemin** : l'admin marche, le GPS enregistre sa trace. Les traces qui passent à moins de 5 m l'une de l'autre sont reliées (nœuds) ; l'app calcule le plus court chemin (Dijkstra) sur ce réseau et le trace au coureur.

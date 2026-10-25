@@ -19,6 +19,12 @@ object Config {
     // Distance (m) à partir de laquelle on considère être arrivé à la balise
     const val BEACON_REACH_M = 25.0
 
+    // Suivi de parcours : écart au tracé (m) au-delà duquel on considère le coureur dévié (au moins 2,5 x la précision GPS),
+    // nombre de positions consécutives hors tracé avant recalcul, délai minimum entre deux recalculs
+    const val DEVIATION_MIN_M = 30.0
+    const val DEVIATION_SAMPLES = 3
+    const val REPLAN_MIN_INTERVAL_MS = 10_000L
+
     // ASCII uniquement : OkHttp refuse les accents dans les en-têtes HTTP
     const val USER_AGENT = "OrientationJP/2.0 (College Jean Prevost, Villard-de-Lans)"
 }

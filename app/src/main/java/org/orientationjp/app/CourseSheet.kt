@@ -29,6 +29,24 @@ fun courseSummary(c: Course): String {
     return s
 }
 
+/** Bandeau de suivi : prochaine balise, distance restante, temps estimé, balises faites. */
+fun courseBannerText(state: UiState, c: Course): String {
+    val visited = state.courseVisited
+    val doneN = visited.size
+    if (state.courseDone) return "Parcours terminé !\n" + doneN + " balise" + (if (doneN > 1) "s" else "") + " · bravo"
+    val g = c.geometry
+    val remaining = Math.max(0.0, g.total - state.courseProgress)
+    val timeLeft = if (g.total > 0.0) c.timeS * remaining / g.total else 0.0
+    val nextIdx = c.order.indexOfFirst { it.id !in visited }
+    val first = if (nextIdx >= 0 && nextIdx < g.stopCum.size) {
+        "Prochaine : n°" + c.order[nextIdx].number + " · " + Geo.format(Math.max(0.0, g.stopCum[nextIdx] - state.courseProgress))
+    } else {
+        "Va à l'arrivée · " + Geo.format(remaining)
+    }
+    val totalN = doneN + c.order.count { it.id !in visited }
+    return first + "\nReste " + Geo.format(remaining) + " · " + Geo.formatTime(timeLeft) + " · " + doneN + "/" + totalN + " balises"
+}
+
 /** Composer un parcours : numéros des balises + arrivée sur la carte, l'app trouve l'ordre le plus rapide. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

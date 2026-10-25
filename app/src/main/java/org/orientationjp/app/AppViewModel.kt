@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.max
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -63,6 +64,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private var routeJob: Job? = null
     private var lastRouteLat = Double.NaN
     private var lastRouteLon = Double.NaN
+    private var offCount = 0
+    private var lastReplanMs = 0L
 
     init {
         // trace en cours sauvegardée (plantage, téléphone éteint...) : on la reprend, en pause
@@ -277,6 +280,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         recomputeRoute(false)
+        trackCourse(loc.latitude, loc.longitude, if (loc.hasAccuracy()) loc.accuracy else null)
     }
 
     fun requestRecenter() {
@@ -403,12 +407,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setFinish(lat: Double, lon: Double) {
-        _state.update { it.copy(finish = GeoPt(lat, lon), pickingFinish = false, course = null) }
+        _state.update { it.copy(finish = GeoPt(lat, lon), pickingFinish = false, course = null, courseProgress = 0.0, courseVisited = emptySet(), courseDone = false) }
         say("Arrivée placée")
     }
 
     fun clearCourse() {
-        _state.update { it.copy(course = null, finish = null, pickingFinish = false) }
+        _state.update { it.copy(course = null, finish = null, pickingFinish = false, courseProgress = 0.0, courseVisited = emptySet(), courseDone = false) }
     }
 
     fun planCourse(numbersText: String) {
@@ -443,12 +447,103 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val c = withContext(Dispatchers.Default) { CoursePlanner.plan(g, GeoPt(la, lo), chosen, finish) }
-                _state.update { it.copy(course = c) }
+                offCount = 0
+                lastReplanMs = System.currentTimeMillis()
+                _state.update { it.copy(course = c, courseProgress = 0.0, courseVisited = emptySet(), courseDone = false) }
                 say("Parcours : " + Geo.format(c.lengthM) + " · " + Geo.formatTime(c.timeS))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 say("Erreur de calcul : " + (e.message ?: e.javaClass.simpleName).take(80))
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ suivi dynamique du parcours
+    /**
+     * Appelé à chaque position GPS : avance la progression le long du tracé (le parcouru passe en gris),
+     * détecte les balises atteintes et recalcule le parcours si le coureur s'écarte du tracé.
+     */
+    private fun trackCourse(lat: Double, lon: Double, accuracy: Float?) {
+        val st = _state.value
+        val course = st.course ?: return
+        if (st.courseDone) return
+        val geo = course.geometry
+        var visited = st.courseVisited
+        var progress = st.courseProgress
+        var replan = false
+
+        // 1. balises atteintes
+        val reach = Config.BEACON_REACH_M
+        val order = course.order
+        val next = order.indexOfFirst { it.id !in visited }
+        for (k in order.indices) {
+            val b = order[k]
+            if (b.id in visited) continue
+            if (Geo.distance(lat, lon, b.lat, b.lon) <= reach) {
+                visited = visited + b.id
+                if (k == next) {
+                    if (k < geo.stopCum.size) progress = max(progress, geo.stopCum[k])
+                    say("Balise n°" + b.number + " atteinte")
+                } else {
+                    replan = true
+                    say("Balise n°" + b.number + " atteinte (hors ordre) : parcours recalculé")
+                }
+            }
+        }
+
+        // 2. arrivée
+        if (order.all { it.id in visited } && Geo.distance(lat, lon, course.finish.lat, course.finish.lon) <= reach) {
+            _state.update { it.copy(courseVisited = visited, courseProgress = geo.total, courseDone = true) }
+            say("Parcours terminé !")
+            return
+        }
+
+        // 3. progression le long du tracé (fenêtre vers l'avant : le tracé peut repasser au même endroit)
+        val thr = max(Config.DEVIATION_MIN_M, 2.5 * (accuracy ?: 0f).toDouble())
+        val near = geo.nearest(lat, lon, progress - 40.0, progress + 250.0)
+        var off = false
+        if (near != null && near.dist <= thr) {
+            progress = max(progress, near.progress)
+        } else {
+            off = true
+        }
+        offCount = if (off) offCount + 1 else 0
+
+        // 4. grosse déviation prolongée : on recalcule depuis la position actuelle
+        val now = System.currentTimeMillis()
+        if (!replan && offCount >= Config.DEVIATION_SAMPLES && now - lastReplanMs > Config.REPLAN_MIN_INTERVAL_MS) {
+            replan = true
+        }
+
+        if (progress != st.courseProgress || visited != st.courseVisited) {
+            _state.update { it.copy(courseProgress = progress, courseVisited = visited) }
+        }
+        if (replan) replanCourse(course, lat, lon, visited)
+    }
+
+    private fun replanCourse(old: Course, lat: Double, lon: Double, visited: Set<Long>) {
+        offCount = 0
+        lastReplanMs = System.currentTimeMillis()
+        val remaining = old.order.filter { it.id !in visited }
+        val g = graph
+        viewModelScope.launch {
+            try {
+                val c = withContext(Dispatchers.Default) { CoursePlanner.plan(g, GeoPt(lat, lon), remaining, old.finish) }
+                var applied = false
+                _state.update { cur ->
+                    if (cur.course === old && !cur.courseDone) {
+                        applied = true
+                        cur.copy(course = c, courseProgress = 0.0, courseVisited = cur.courseVisited + visited)
+                    } else {
+                        cur
+                    }
+                }
+                if (applied) say("Parcours recalculé depuis ta position")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                say("Erreur de recalcul : " + (e.message ?: e.javaClass.simpleName).take(80))
             }
         }
     }

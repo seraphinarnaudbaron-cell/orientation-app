@@ -33,7 +33,7 @@ data class Route(
 )
 
 /** Un morceau de parcours à dessiner : plein (sur un chemin) ou pointillé (raccord / hors chemin). */
-data class CourseSeg(val points: List<GeoPt>, val dashed: Boolean)
+data class CourseSeg(val points: List<GeoPt>, val dashed: Boolean, val leg: Int = 0)
 
 data class CourseLeg(val from: String, val to: String, val lengthM: Double, val timeS: Double, val onTrails: Boolean)
 
@@ -46,7 +46,10 @@ data class Course(
     val timeS: Double,
     val ascent: Double,
     val descent: Double,
-)
+) {
+    /** Géométrie continue du parcours (distances cumulées, suivi de progression) : calculée une seule fois. */
+    val geometry: CourseGeometry by lazy { CourseGeometry(this) }
+}
 
 fun pathLength(points: List<GeoPt>): Double {
     var total = 0.0
@@ -95,6 +98,10 @@ data class UiState(
     val pickingFinish: Boolean = false,
     val course: Course? = null,
     val basemap: String = "osm",
+    /** Suivi du parcours : distance déjà parcourue le long du tracé, balises atteintes, parcours terminé. */
+    val courseProgress: Double = 0.0,
+    val courseVisited: Set<Long> = emptySet(),
+    val courseDone: Boolean = false,
 ) {
     fun distanceTo(b: Beacon): Double? {
         val la = myLat

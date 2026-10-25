@@ -242,12 +242,12 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1565C0), RoundedCornerShape(16.dp))
+                        .background(Color(if (state.courseDone) 0xFF2E7D32 else 0xFF1565C0), RoundedCornerShape(16.dp))
                         .padding(start = 14.dp, end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        courseSummary(course),
+                        courseBannerText(state, course),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
@@ -483,15 +483,17 @@ private fun syncOverlays(mv: MapView, state: UiState, onBeacon: (Beacon) -> Unit
         mv.overlays.add(solidLine(state.recorded, "#E53935", 9f))
     }
 
-    // Parcours multi-balises : plein sur les chemins, pointillé pour les raccords
+    // Parcours multi-balises, comme un GPS : ce qui reste est en bleu, ce qui est déjà parcouru est en gris
     val course = state.course
     if (course != null) {
-        for (seg in course.segments) {
-            if (seg.dashed) {
-                mv.overlays.add(dashedLine(seg.points.first(), seg.points.last(), "#1565C0"))
-            } else {
-                mv.overlays.add(solidLine(seg.points, "#1565C0", 10f))
-            }
+        val parts = course.geometry.renderParts(state.courseProgress)
+        for (part in parts) {
+            if (!part.done) continue
+            if (part.dashed) mv.overlays.add(dashedPath(part.points, "#9E9E9E")) else mv.overlays.add(solidLine(part.points, "#9E9E9E", 8f))
+        }
+        for (part in parts) {
+            if (part.done) continue
+            if (part.dashed) mv.overlays.add(dashedPath(part.points, "#1565C0")) else mv.overlays.add(solidLine(part.points, "#1565C0", 10f))
         }
     }
 
@@ -542,7 +544,7 @@ private fun syncOverlays(mv: MapView, state: UiState, onBeacon: (Beacon) -> Unit
     for (b in state.beacons) {
         val m = Marker(mv)
         m.position = GeoPoint(b.lat, b.lon)
-        m.icon = ContextCompat.getDrawable(ctx, R.drawable.beacon)
+        m.icon = ContextCompat.getDrawable(ctx, if (b.id in state.courseVisited) R.drawable.beacon_done else R.drawable.beacon)
         m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
         m.title = b.title
         m.setOnMarkerClickListener { _, _ ->
@@ -574,9 +576,11 @@ private fun solidLine(points: List<GeoPt>, color: String, width: Float): Polylin
     return line
 }
 
-private fun dashedLine(a: GeoPt, b: GeoPt, color: String): Polyline {
+private fun dashedLine(a: GeoPt, b: GeoPt, color: String): Polyline = dashedPath(listOf(a, b), color)
+
+private fun dashedPath(points: List<GeoPt>, color: String): Polyline {
     val line = Polyline()
-    line.setPoints(listOf(GeoPoint(a.lat, a.lon), GeoPoint(b.lat, b.lon)))
+    line.setPoints(points.map { GeoPoint(it.lat, it.lon) })
     line.outlinePaint.color = android.graphics.Color.parseColor(color)
     line.outlinePaint.strokeWidth = 7f
     line.outlinePaint.pathEffect = DashPathEffect(floatArrayOf(24f, 16f), 0f)
