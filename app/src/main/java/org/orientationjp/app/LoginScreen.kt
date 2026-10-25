@@ -74,8 +74,8 @@ fun LoginScreen(initialName: String, initialPrivate: Boolean, onStart: (String, 
                 CardTitle("Ton nom de coureur")
                 RoundField(
                     value = name,
-                    onValueChange = { name = it.take(30) },
-                    hint = "ex. Léa",
+                    onValueChange = { name = it.take(Config.MAX_NAME) },
+                    hint = "ex. Léa (20 caractères max)",
                     modifier = Modifier.fillMaxWidth(),
                     onAction = { onStart(name, priv) },
                 )

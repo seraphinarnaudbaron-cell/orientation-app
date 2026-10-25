@@ -26,6 +26,14 @@ Kotlin natif, Jetpack Compose, carte OpenStreetMap (osmdroid), backend Supabase.
 - **Mode hors ligne** : balises et chemins sont gardés en mémoire ; le calcul d'itinéraire et de parcours fonctionne sans réseau ; les positions repartent automatiquement au retour du réseau.
 - **Fonds de carte** : Plan OSM, Plan IGN, Photo aérienne IGN (Menu). Les fonds IGN peuvent être téléchargés pour la zone (Menu > Carte hors ligne). OpenStreetMap interdit le téléchargement en masse.
 
+## Version 2.1
+
+- **Autres coureurs masqués par défaut** ; activables dans Menu > Autres coureurs.
+- **Pseudo : 20 caractères maximum** (vérifié aussi côté serveur), avec plafonds anti-abus sur la base.
+- **Flèche vers la balise visée** : à moins de 60 m de la balise visée (« Y aller » ou prochaine du parcours), une petite flèche apparaît en haut à gauche et pointe vers elle (boussole du téléphone).
+- **Journal de bugs automatique** : les plantages sont envoyés au serveur (consultables dans le panel admin) avec le modèle du téléphone et la version d'Android, jamais la position.
+- **APK signé avec une clé permanente** : les mises à jour s'installent par-dessus l'ancienne version sans désinstaller. Lien direct de la dernière version : `https://github.com/seraphinarnaudbaron-cell/orientation-app/releases/download/latest/orientation-jp.apk`
+
 ## Mise en route
 
 ### 1. Base de données (Supabase)
@@ -34,7 +42,7 @@ Le mot de passe admin est vérifié côté serveur : il n'est ni dans le code ni
 Si le projet est en pause (offre gratuite), le restaurer depuis le dashboard.
 
 ### 2. Compiler l'APK
-- **GitHub Actions** : chaque push sur `main` compile l'APK (≈ 5-8 min) → onglet *Actions* → artifact `orientation-jp-debug`.
+- **GitHub Actions** : chaque push sur `main` compile l'APK signé (≈ 5-8 min) et le publie à l'adresse ci-dessus (release « latest »). Secrets requis : `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
 - **Android Studio** : ouvrir le dossier, *Run*.
 - **Ligne de commande** : `./gradlew assembleDebug` → `app/build/outputs/apk/debug/`.
 

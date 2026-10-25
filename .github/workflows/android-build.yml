@@ -7,6 +7,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -30,11 +33,26 @@ jobs:
       - name: Set up Gradle (cache)
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK
+      - name: Clé de signature permanente
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KS_B64" ]; then
+            echo "::error title=Signature::Secret ANDROID_KEYSTORE_BASE64 absent : impossible de signer l'APK"
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/orientationjp.p12"
+
+      - name: Build APK signé
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/orientationjp.p12
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           set -o pipefail
-          if ! ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log; then
+          if ! ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log; then
             python3 - <<'PY'
           import re
           lines = open("build.log", errors="replace").read().splitlines()
@@ -48,10 +66,27 @@ jobs:
           PY
             exit 1
           fi
+          cp app/build/outputs/apk/release/app-release.apk orientation-jp.apk
+
+      - name: Vérifier la signature
+        run: |
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs orientation-jp.apk | grep -E "Signer #1 certificate (DN|SHA-256)" || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: orientation-jp-debug
-          path: app/build/outputs/apk/debug/*.apk
+          name: orientation-jp
+          path: orientation-jp.apk
           if-no-files-found: error
+
+      - name: Publier la dernière version (lien de téléchargement direct)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag -y || true
+          gh release create latest orientation-jp.apk \
+            --title "Dernière version" \
+            --notes "Version automatique du dernier commit (${GITHUB_SHA::7}). Lien direct : https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/orientation-jp.apk" \
+            --target "$GITHUB_SHA"

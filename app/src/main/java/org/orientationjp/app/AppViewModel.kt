@@ -36,6 +36,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             username = prefs.name,
             privateMode = prefs.privateMode,
             basemap = prefs.basemap,
+            showOthers = prefs.showOthers,
         )
     )
     private val tracker = LocationTracker(
@@ -45,6 +46,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     )
 
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    private val _heading = MutableStateFlow<Float?>(null)
+    /** Cap du téléphone (degrés, nord = 0) : uniquement quand la flèche vers la balise est affichée. */
+    val heading: StateFlow<Float?> = _heading.asStateFlow()
+    private val compass = CompassTracker(app) { h -> _heading.value = h }
+    private var compassOn = false
 
     private val _messages = Channel<String>(Channel.BUFFERED)
     val messages = _messages.receiveAsFlow()
@@ -76,7 +83,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             say("Enregistrement repris : " + saved.second.size + " points (en pause). « Reprendre » pour continuer, « Fin » pour enregistrer.")
         }
         // balises et chemins en mémoire : l'app fonctionne même sans réseau
-        viewModelScope.launch(Dispatchers.IO) { loadCache() }
+        viewModelScope.launch(Dispatchers.IO) {
+            loadCache()
+            BugReporter.sendPending(prefs.name)
+        }
         if (_state.value.loggedIn) startSession()
     }
 
@@ -87,6 +97,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { st -> if (st.beacons.isEmpty()) st.copy(beacons = list) else st }
             }
         } catch (e: Exception) {
+            BugReporter.report("cache-balises", e)
         }
         try {
             cache.trailsJson()?.let { json ->
@@ -98,6 +109,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         } catch (e: Exception) {
+            BugReporter.report("cache-chemins", e)
         }
     }
 
@@ -134,6 +146,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** force = true pour une action demandée par l'utilisateur : on affiche toujours l'erreur. */
     private fun onNetworkError(e: Exception, force: Boolean = false) {
         val wasOffline = _state.value.online == false
+        if (e !is ApiException && e !is java.io.IOException) BugReporter.report("inattendu", e)
         val detail = e.javaClass.simpleName + ": " + (e.message ?: "").take(70)
         _state.update { it.copy(online = false, lastError = detail) }
         if (e is ApiException) {
@@ -169,8 +182,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------------ session
     fun login(name: String, private: Boolean) {
         val n = name.trim()
-        if (n.isEmpty() || n.length > 30) {
-            say("Entre un nom (30 caractères max)")
+        if (n.isEmpty() || n.length > Config.MAX_NAME) {
+            say("Entre un pseudo (" + Config.MAX_NAME + " caractères maximum)")
             return
         }
         prefs.name = n
@@ -227,6 +240,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             while (isActive) {
                 refreshBeacons()
                 refreshTrails()
+                val u = _state.value.username.ifEmpty { "?" }
+                withContext(Dispatchers.IO) { BugReporter.sendPending(u) }
                 delay(60_000L)
             }
         }
@@ -281,6 +296,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         recomputeRoute(false)
         trackCourse(loc.latitude, loc.longitude, if (loc.hasAccuracy()) loc.accuracy else null)
+        updateCompass()
+    }
+
+    /** La boussole ne tourne que lorsque la flèche vers la balise visée est affichée (moins de 60 m). */
+    private fun updateCompass() {
+        val st = _state.value
+        val b = st.aimed
+        val d = if (b != null) st.distanceTo(b) else null
+        val need = d != null && d <= Config.ARROW_RADIUS_M
+        if (need && !compassOn) {
+            compassOn = compass.start(st.myLat, st.myLon)
+        } else if (!need && compassOn) {
+            compass.stop()
+            compassOn = false
+            _heading.value = null
+        }
     }
 
     fun requestRecenter() {
@@ -293,6 +324,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         tracker.stop()
+        compass.stop()
         super.onCleared()
     }
 
@@ -322,7 +354,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun setShowOthers(on: Boolean) {
+        prefs.showOthers = on
+        _state.update { it.copy(showOthers = on, runners = if (on) it.runners else emptyList()) }
+        if (on) viewModelScope.launch { refreshRunners() }
+        say(if (on) "Autres coureurs visibles" else "Autres coureurs masqués")
+    }
+
     private suspend fun refreshRunners() {
+        if (!_state.value.showOthers) return
         try {
             val list = withContext(Dispatchers.IO) { SupabaseApi.getRunners() }
             _state.update { st -> st.copy(runners = list.filter { it.name != st.username }, online = true, lastError = "") }
@@ -352,6 +392,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(target = b, route = null) }
         if (b != null) say("Direction : " + b.title)
         recomputeRoute(true)
+        updateCompass()
     }
 
     // ------------------------------------------------------------------ chemins et itinéraire
@@ -454,6 +495,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                BugReporter.report("calcul-parcours", e)
                 say("Erreur de calcul : " + (e.message ?: e.javaClass.simpleName).take(80))
             }
         }
@@ -543,6 +585,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                BugReporter.report("recalcul-parcours", e)
                 say("Erreur de recalcul : " + (e.message ?: e.javaClass.simpleName).take(80))
             }
         }
@@ -657,9 +700,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun clearBugs() {
+        val pw = adminPassword
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { SupabaseApi.adminClearBugs(pw) }
+                say("Journal effacé")
+                refreshAdmin()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onNetworkError(e, force = true)
+            }
+        }
+    }
+
     fun lockAdmin() {
         adminPassword = ""
-        _state.update { it.copy(adminUnlocked = false, adminStats = null) }
+        _state.update { it.copy(adminUnlocked = false, adminStats = null, bugs = emptyList()) }
     }
 
     fun refreshAdmin() {
@@ -667,7 +725,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val stats = withContext(Dispatchers.IO) { SupabaseApi.adminStats(adminPassword) }
-                _state.update { it.copy(adminStats = stats) }
+                val bugs = withContext(Dispatchers.IO) { SupabaseApi.adminBugs(adminPassword) }
+                _state.update { it.copy(adminStats = stats, bugs = bugs) }
                 refreshBeacons()
                 refreshTrails()
             } catch (e: CancellationException) {

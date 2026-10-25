@@ -59,6 +59,17 @@ fun pathLength(points: List<GeoPt>): Double {
     return total
 }
 
+/** Entrée du journal de bugs (visible dans le panel admin). */
+data class AdminBug(
+    val id: Long,
+    val time: String,
+    val user: String,
+    val version: String,
+    val device: String,
+    val tag: String,
+    val message: String,
+)
+
 data class Runner(val name: String, val lat: Double, val lon: Double)
 
 data class AdminStats(
@@ -102,7 +113,20 @@ data class UiState(
     val courseProgress: Double = 0.0,
     val courseVisited: Set<Long> = emptySet(),
     val courseDone: Boolean = false,
+    /** Voir les autres coureurs sur la carte : désactivé par défaut (vie privée). */
+    val showOthers: Boolean = false,
+    val bugs: List<AdminBug> = emptyList(),
 ) {
+    /** La balise visée : celle de « Y aller », sinon la prochaine balise du parcours en cours. */
+    val aimed: Beacon?
+        get() {
+            val t = target
+            if (t != null) return t
+            val c = course
+            if (c != null && !courseDone) return c.order.firstOrNull { it.id !in courseVisited }
+            return null
+        }
+
     fun distanceTo(b: Beacon): Double? {
         val la = myLat
         val lo = myLon

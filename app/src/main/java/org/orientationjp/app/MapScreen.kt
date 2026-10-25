@@ -309,6 +309,7 @@ fun MapScreen(state: UiState, vm: AppViewModel) {
                     )
                 }
             }
+            Row(Modifier.fillMaxWidth()) { AimArrow(state, vm) }
         }
 
         // ---- boutons flottants
@@ -437,7 +438,7 @@ private fun statusText(state: UiState): String {
         parts.add("mode privé")
     } else if (state.online == false) {
         parts.add("hors ligne" + (if (state.beacons.isNotEmpty()) " · données en mémoire" else "") + (if (state.lastError.isNotEmpty()) " (" + state.lastError + ")" else ""))
-    } else if (state.online == true) {
+    } else if (state.online == true && state.showOthers) {
         val n = state.runners.size
         parts.add(n.toString() + " autre" + (if (n > 1) "s" else "") + " en ligne")
     }

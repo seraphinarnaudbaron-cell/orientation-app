@@ -19,6 +19,10 @@ object Config {
     // Distance (m) à partir de laquelle on considère être arrivé à la balise
     const val BEACON_REACH_M = 25.0
 
+    // Longueur maximale du pseudo (aussi imposée côté serveur) et rayon d'apparition de la flèche vers la balise (m)
+    const val MAX_NAME = 20
+    const val ARROW_RADIUS_M = 60.0
+
     // Suivi de parcours : écart au tracé (m) au-delà duquel on considère le coureur dévié (au moins 2,5 x la précision GPS),
     // nombre de positions consécutives hors tracé avant recalcul, délai minimum entre deux recalculs
     const val DEVIATION_MIN_M = 30.0

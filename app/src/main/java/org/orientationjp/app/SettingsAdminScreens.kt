@@ -60,6 +60,16 @@ fun SettingsScreen(state: UiState, vm: AppViewModel) {
             )
         }
         AppCard {
+            CardTitle("Autres coureurs")
+            BodyText("Par défaut, les autres élèves n'apparaissent pas sur ta carte. Active pour les voir (ceux qui partagent leur position).")
+            ToggleChip(
+                checked = state.showOthers,
+                textOn = "Autres coureurs visibles",
+                textOff = "Autres coureurs masqués",
+                onToggle = { vm.setShowOthers(it) },
+            )
+        }
+        AppCard {
             CardTitle("Fond de carte")
             ChoiceRow(TileSources.LABELS, TileSources.KEYS.indexOf(state.basemap).coerceAtLeast(0)) { vm.setBasemap(TileSources.KEYS[it]) }
             BodyText("La photo aérienne (IGN) est idéale pour viser une balise précisément.")
@@ -70,7 +80,7 @@ fun SettingsScreen(state: UiState, vm: AppViewModel) {
             GhostButton("Changer de nom", Modifier.fillMaxWidth()) { vm.logout() }
         }
         Text(
-            "Version 2.0.0",
+            "Version " + appVersion(androidx.compose.ui.platform.LocalContext.current),
             color = Muted,
             fontSize = 12.sp,
             modifier = Modifier.fillMaxWidth(),
@@ -191,6 +201,24 @@ fun AdminScreen(state: UiState, vm: AppViewModel) {
                             )
                             GhostButton("Suppr.") { vm.deleteTrail(t) }
                         }
+                    }
+                }
+
+                AppCard {
+                    CardTitle("Journal des bugs")
+                    BodyText("Les plantages des téléphones sont envoyés automatiquement ici.")
+                    if (state.bugs.isEmpty()) {
+                        BodyText("Aucun bug signalé.", Green2)
+                    }
+                    for (bug in state.bugs.take(12)) {
+                        Text(
+                            bug.time + " · " + bug.user + " · v" + bug.version + "\n" + bug.tag + " : " + bug.message.take(140),
+                            color = TextDark,
+                            fontSize = 12.sp,
+                        )
+                    }
+                    if (state.bugs.isNotEmpty()) {
+                        GhostButton("Effacer le journal", Modifier.fillMaxWidth()) { vm.clearBugs() }
                     }
                 }
 

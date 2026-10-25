@@ -13,7 +13,7 @@ create extension if not exists pgcrypto with schema extensions;
 
 -- ---------- Tables ----------------------------------------------------
 create table if not exists public.runner_positions (
-  username   text primary key check (char_length(username) between 1 and 30),
+  username   text primary key check (char_length(username) between 1 and 20),
   latitude   double precision not null check (latitude between -90 and 90),
   longitude  double precision not null check (longitude between -180 and 180),
   updated_at timestamptz not null default now()
@@ -65,7 +65,7 @@ create policy "lecture balises" on public.beacons
 create or replace function public.upsert_position(p_username text, p_lat double precision, p_lon double precision)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if p_username is null or char_length(trim(p_username)) not between 1 and 30 then
+  if p_username is null or char_length(trim(p_username)) not between 1 and 20 then
     raise exception 'Nom invalide';
   end if;
   insert into public.runner_positions (username, latitude, longitude, updated_at)
@@ -82,7 +82,7 @@ $$;
 create or replace function public.log_event(p_username text, p_event text)
 returns void language sql security definer set search_path = public as $$
   insert into public.app_events (username, event)
-  values (left(trim(p_username), 30), left(p_event, 40));
+  values (left(trim(p_username), 20), left(p_event, 40));
 $$;
 
 -- ---------- Fonctions admin (mot de passe vérifié côté serveur) ------
@@ -248,6 +248,83 @@ end $$;
 
 grant execute on function public.admin_add_beacon(text, text, double precision, double precision, text, text, integer) to anon, authenticated;
 grant execute on function public.admin_update_beacon(text, bigint, text, double precision, double precision, text, text, integer) to anon, authenticated;
+
+-- ---------- Pseudo limité à 20 caractères + protections anti-abus (v2.1) --------
+delete from public.runner_positions where char_length(username) > 20;
+alter table public.runner_positions drop constraint if exists runner_positions_username_check;
+alter table public.runner_positions add constraint runner_positions_username_check check (char_length(username) between 1 and 20);
+
+create or replace function public.upsert_position(p_username text, p_lat double precision, p_lon double precision)
+returns void language plpgsql security definer set search_path = public as $$
+declare n text := trim(p_username);
+begin
+  if n is null or char_length(n) not between 1 and 20 then raise exception 'Pseudo invalide (1 à 20 caractères)'; end if;
+  delete from public.runner_positions where updated_at < now() - interval '1 hour';
+  if (select count(*) from public.runner_positions) >= 1000
+     and not exists (select 1 from public.runner_positions where username = n) then
+    raise exception 'Trop de coureurs connectés';
+  end if;
+  insert into public.runner_positions (username, latitude, longitude, updated_at)
+  values (n, p_lat, p_lon, now())
+  on conflict (username) do update
+    set latitude = excluded.latitude, longitude = excluded.longitude, updated_at = now();
+end $$;
+
+create or replace function public.log_event(p_username text, p_event text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if random() < 0.02 then
+    delete from public.app_events where created_at < now() - interval '60 days';
+  end if;
+  if (select count(*) from public.app_events) >= 100000 then return; end if;
+  insert into public.app_events (username, event) values (left(trim(coalesce(p_username, '')), 20), left(coalesce(p_event, ''), 20));
+end $$;
+
+-- ---------- Journal des bugs (envoyé automatiquement par l'app) -------------
+create table if not exists public.bug_reports (
+  id          bigint generated always as identity primary key,
+  created_at  timestamptz not null default now(),
+  username    text,
+  app_version text,
+  device      text,
+  tag         text,
+  message     text,
+  stack       text
+);
+alter table public.bug_reports enable row level security;
+revoke all on public.bug_reports from anon, authenticated;
+
+create or replace function public.log_bug(p_username text, p_version text, p_device text, p_tag text, p_message text, p_stack text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if (select count(*) from public.bug_reports where created_at > now() - interval '1 hour') >= 300 then
+    raise exception 'Trop de rapports';
+  end if;
+  insert into public.bug_reports (username, app_version, device, tag, message, stack)
+  values (left(trim(coalesce(p_username, '')), 20), left(coalesce(p_version, ''), 20), left(coalesce(p_device, ''), 80),
+          left(coalesce(p_tag, ''), 40), left(coalesce(p_message, ''), 300), left(coalesce(p_stack, ''), 4000));
+  delete from public.bug_reports where id in (select id from public.bug_reports order by id desc offset 2000);
+end $$;
+
+create or replace function public.admin_bugs(p_password text)
+returns json language plpgsql security definer set search_path = public as $$
+begin
+  if not public._admin_ok(p_password) then raise exception 'Mot de passe incorrect'; end if;
+  return (select coalesce(json_agg(b), '[]'::json) from (
+    select id, created_at, username, app_version, device, tag, message, left(stack, 600) as stack
+    from public.bug_reports order by id desc limit 30) b);
+end $$;
+
+create or replace function public.admin_clear_bugs(p_password text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public._admin_ok(p_password) then raise exception 'Mot de passe incorrect'; end if;
+  delete from public.bug_reports;
+end $$;
+
+grant execute on function public.log_bug(text, text, text, text, text, text) to anon, authenticated;
+grant execute on function public.admin_bugs(text) to anon, authenticated;
+grant execute on function public.admin_clear_bugs(text) to anon, authenticated;
 
 -- ---------- Mot de passe admin ---------------------------------------
 -- ⚠️ Remplace CHANGE_MOI avant d'exécuter. Pour le changer plus tard, relance seulement ce bloc.

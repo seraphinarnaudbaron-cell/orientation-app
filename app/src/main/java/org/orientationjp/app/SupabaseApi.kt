@@ -194,6 +194,43 @@ object SupabaseApi {
         rpc("admin_delete_trail", JSONObject().put("p_password", password).put("p_id", id))
     }
 
+    fun logBug(username: String, version: String, device: String, tag: String, message: String, stack: String) {
+        rpc(
+            "log_bug",
+            JSONObject()
+                .put("p_username", username)
+                .put("p_version", version)
+                .put("p_device", device)
+                .put("p_tag", tag)
+                .put("p_message", message)
+                .put("p_stack", stack),
+        )
+    }
+
+    fun adminBugs(password: String): List<AdminBug> {
+        val arr = JSONArray(rpc("admin_bugs", JSONObject().put("p_password", password)))
+        val out = ArrayList<AdminBug>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            out.add(
+                AdminBug(
+                    id = o.getLong("id"),
+                    time = o.str("created_at").take(16).replace('T', ' '),
+                    user = o.str("username"),
+                    version = o.str("app_version"),
+                    device = o.str("device"),
+                    tag = o.str("tag"),
+                    message = o.str("message"),
+                )
+            )
+        }
+        return out
+    }
+
+    fun adminClearBugs(password: String) {
+        rpc("admin_clear_bugs", JSONObject().put("p_password", password))
+    }
+
     fun adminStats(password: String): AdminStats {
         val o = JSONObject(rpc("admin_stats", JSONObject().put("p_password", password)))
         return AdminStats(
